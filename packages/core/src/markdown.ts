@@ -143,7 +143,7 @@ function tokensToBlocks(tokens: Token[], report: ConversionReport): PMNode[] {
         const only = children.filter((c) => c.type !== "space");
         if (only.length === 1 && only[0]!.type === "image") {
           const img = only[0] as Tokens.Image;
-          if (/^\/api\/attachments\//.test(img.href)) {
+          if (img.href.startsWith("/api/attachments/")) {
             out.push({ type: "image", attrs: { src: img.href, alt: img.text } });
             break;
           }

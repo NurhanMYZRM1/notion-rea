@@ -92,3 +92,63 @@ export function memoryStore() {
     },
   };
 }
+
+// ---------- shared fixtures for the wider suites ----------
+
+/** Open a WebSocket on any realtime path and resolve with its close code (or "open" if it stays open). */
+export async function socketOutcome(user: TestUser, path: string, waitMs = 1000): Promise<{ code: number | "open"; messages: unknown[]; ws: WebSocket | null }> {
+  const res = await SELF.fetch(`${BASE}${path}`, { headers: { Upgrade: "websocket", Cookie: user.cookie, Origin: BASE } });
+  const ws = res.webSocket;
+  if (!ws) return { code: res.status, messages: [], ws: null };
+  const messages: unknown[] = [];
+  const closed = new Promise<number>((resolve) => ws.addEventListener("close", (e) => resolve(e.code)));
+  ws.addEventListener("message", (e) => {
+    messages.push(e.data);
+  });
+  ws.accept();
+  const code = await Promise.race([closed, new Promise<"open">((r) => setTimeout(() => r("open"), waitMs))]);
+  return { code, messages, ws };
+}
+
+export async function uploadFile(
+  user: TestUser,
+  pageId: string,
+  body: BodyInit,
+  type = "image/png",
+  name = "pic.png",
+  extra: Record<string, string> = {},
+): Promise<{ status: number; body: any }> {
+  const bytes = typeof body === "string" ? new TextEncoder().encode(body) : body;
+  const res = await SELF.fetch(`${BASE}/api/pages/${pageId}/attachments`, {
+    method: "POST",
+    headers: {
+      Origin: BASE,
+      Cookie: user.cookie,
+      "Content-Type": type,
+      "X-File-Name": encodeURIComponent(name),
+      ...(bytes instanceof Uint8Array ? { "Content-Length": String(bytes.byteLength) } : {}),
+      ...extra,
+    },
+    body: bytes,
+  });
+  const text = await res.text();
+  let parsed: unknown = text;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    /* not JSON */
+  }
+  return { status: res.status, body: parsed };
+}
+
+export async function newPage(user: TestUser, ws: string, input: Record<string, unknown> = {}): Promise<any> {
+  const res = await api(user, "POST", `/api/w/${ws}/pages`, { title: "Page", ...input });
+  if (res.status !== 201) throw new Error(`create page failed ${res.status}: ${JSON.stringify(res.body)}`);
+  return res.body.page;
+}
+
+export async function newDatabase(user: TestUser, ws: string, input: Record<string, unknown> = {}): Promise<any> {
+  const res = await api(user, "POST", `/api/w/${ws}/databases`, { title: "DB", ...input });
+  if (res.status !== 201) throw new Error(`create database failed ${res.status}: ${JSON.stringify(res.body)}`);
+  return res.body.database;
+}

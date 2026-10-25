@@ -38,6 +38,8 @@ Resume here. Plan: [plans/workspace-blueprint.md](../plans/workspace-blueprint.m
 
 ## Open blockers / external inputs
 
+- **Cloudflare permissions (deploy blocker):** on account f51018ee… the login is only "Individual Workers Editor"; `wrangler d1 list` / `r2 bucket list` / `kv namespace list` fail with `Authentication error [code: 10000]` (checked 2026-10-26). User chose to keep this account and get a role covering Workers, D1, KV and R2 from its super admin. Next action after they confirm: create `workspace-staging` and `workspace` D1/R2/KV, fill ids in `wrangler.jsonc` envs, migrate, deploy.
+
 - Google OAuth client ID/secret (web + iOS + Android client IDs) — needed for real sign-in.
 - Apple Sign in config (Services ID, key) — iOS release dependency.
 - Play Console + App Store Connect access, app identifiers, signing — store testing channels.

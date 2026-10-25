@@ -48,7 +48,7 @@ export interface Me {
 export function createApiClient(opts: ApiClientOptions) {
   const f = opts.fetch ?? fetch;
   async function request<T>(method: string, path: string, body?: unknown, raw?: { body: BodyInit; headers: Record<string, string> }): Promise<T> {
-    const headers: Record<string, string> = { ...(await opts.headers?.()), ...(raw?.headers ?? {}) };
+    const headers: Record<string, string> = { ...(await opts.headers?.()), ...raw?.headers };
     if (body !== undefined) headers["Content-Type"] = "application/json";
     let res: Response;
     try {

@@ -4,6 +4,7 @@
 //
 //   pnpm --filter server bootstrap -- --email owner@example.com [--name "Workspace"]
 //       [--remote --env production --url https://workspace.example.workers.dev] [--force]
+//       [--state ../../.wrangler/other-state]   (local persistence dir; matches wrangler dev --persist-to)
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { parseArgs } from "node:util";
@@ -16,6 +17,7 @@ const { values } = parseArgs({
     env: { type: "string" },
     url: { type: "string", default: "http://localhost:5173" },
     force: { type: "boolean", default: false },
+    state: { type: "string", default: "../../.wrangler/state" },
   },
 });
 const email = values.email?.trim().toLowerCase();
@@ -24,7 +26,7 @@ if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
   process.exit(1);
 }
 const sql = (s) => `'${String(s).replace(/'/g, "''")}'`;
-const target = [values.remote ? "--remote" : "--local", ...(values.env ? ["--env", values.env] : []), ...(values.remote ? [] : ["--persist-to", "../../.wrangler/state"])];
+const target = [values.remote ? "--remote" : "--local", ...(values.env ? ["--env", values.env] : []), ...(values.remote ? [] : ["--persist-to", values.state])];
 const d1 = (command) =>
   JSON.parse(execFileSync("npx", ["wrangler", "d1", "execute", "DB", ...target, "--json", "--command", command], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }));
 
