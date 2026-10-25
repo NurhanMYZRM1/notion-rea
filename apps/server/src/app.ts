@@ -52,6 +52,7 @@ import {
 } from "./domain/pages";
 import { search } from "./domain/search";
 import { AppError } from "./errors";
+import { backupDocuments, restoreDocuments } from "./backup";
 import { handleAuthorize } from "./oauth";
 import { log } from "./util";
 
@@ -276,6 +277,17 @@ export function buildApp() {
   app.get("/api/records/:id", async (c) => c.json({ record: await getRecord(c.env, actorOf(c), param(c, "id")) }));
   app.patch("/api/records/:id", async (c) => c.json({ record: await updateRecord(c.env, actorOf(c), param(c, "id"), await body(c)) }));
 
+  // ---------- operator (backup/restore drills); disabled unless ADMIN_TOKEN is set ----------
+  app.post("/api/admin/backup", async (c) => {
+    await requireAdmin(c);
+    return c.json(await backupDocuments(c.env, 200));
+  });
+  app.post("/api/admin/restore", async (c) => {
+    await requireAdmin(c);
+    const { cursor } = z.object({ cursor: z.string().max(100).nullable().default(null) }).parse(await c.req.json().catch(() => ({})));
+    return c.json(await restoreDocuments(c.env, cursor, 200));
+  });
+
   app.all("/api/*", () => {
     throw new AppError("not_found", "No such endpoint");
   });
@@ -326,6 +338,15 @@ export function buildApp() {
   });
 
   return app;
+}
+
+async function requireAdmin(c: C): Promise<void> {
+  const expected = c.env.ADMIN_TOKEN;
+  const given = (c.req.header("Authorization") ?? "").replace(/^Bearer /, "");
+  if (!expected || expected.length < 24 || given.length !== expected.length) throw new AppError("not_found", "No such endpoint");
+  const enc = new TextEncoder();
+  // Constant-time compare (timingSafeEqual is a workerd extension of SubtleCrypto).
+  if (!crypto.subtle.timingSafeEqual(enc.encode(given), enc.encode(expected))) throw new AppError("not_found", "No such endpoint");
 }
 
 function userIdParam(c: C): string {

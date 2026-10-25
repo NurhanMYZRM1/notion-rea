@@ -18,6 +18,7 @@ export async function upload(
   if (!file.size || file.size > MAX_UPLOAD_BYTES) throw new AppError("too_large", `Files must be between 1 byte and ${MAX_UPLOAD_BYTES / 1024 / 1024} MB`);
   const type = file.type.toLowerCase().split(";")[0]!.trim();
   if (!ALLOWED.test(type)) throw new AppError("unsupported", `File type ${type || "unknown"} is not allowed`);
+  // oxlint-disable-next-line no-control-regex -- stripping control characters from file names is the point
   const name = file.name.replace(/[\u0000-\u001f\\/]/g, "_").slice(0, 200) || "file";
   const id = newId("at");
   const key = `ws/${access.workspaceId}/${id}`;

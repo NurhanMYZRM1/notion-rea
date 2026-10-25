@@ -9,7 +9,10 @@ const key = (workspaceId: string, pageId: string) => `backups/docs/${workspaceId
  */
 export async function backupDocuments(env: Env, limit = 200): Promise<{ backedUp: number; skipped: number; more: boolean }> {
   const rows = await env.DB.prepare(
-    `SELECT p.id, p.workspace_id FROM pages p LEFT JOIN doc_backups b ON b.page_id = p.id
+    // Only pages with a body (projected revision > 0): empty records never wake their object.
+    `SELECT p.id, p.workspace_id FROM pages p
+       JOIN search_docs s ON s.page_id = p.id AND s.revision > 0
+       LEFT JOIN doc_backups b ON b.page_id = p.id
      WHERE p.state != 'deleted' AND (b.backed_up_at IS NULL OR p.updated_at > b.backed_up_at)
      ORDER BY p.updated_at LIMIT ?`,
   )

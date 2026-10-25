@@ -31,9 +31,34 @@ export interface AgentProps {
   [key: string]: unknown;
 }
 
-const READ = requireScopes("workspace:read");
-const WRITE = requireScopes("workspace:read", "workspace:write");
-const ARCHIVE = requireScopes("workspace:read", "workspace:archive");
+const READ_SCOPES = ["workspace:read"] as const;
+const WRITE_SCOPES = ["workspace:read", "workspace:write"] as const;
+const ARCHIVE_SCOPES = ["workspace:read", "workspace:archive"] as const;
+const READ = requireScopes(...READ_SCOPES);
+const WRITE = requireScopes(...WRITE_SCOPES);
+const ARCHIVE = requireScopes(...ARCHIVE_SCOPES);
+
+/** Scopes each tool needs. Checked before dispatch (HTTP 403 step-up) and again inside every tool. */
+export const TOOL_SCOPES: Record<string, readonly string[]> = {
+  workspace_info: READ_SCOPES,
+  search: READ_SCOPES,
+  list_pages: READ_SCOPES,
+  read_page: READ_SCOPES,
+  create_page: WRITE_SCOPES,
+  update_page: WRITE_SCOPES,
+  edit_blocks: WRITE_SCOPES,
+  archive_page: ARCHIVE_SCOPES,
+  restore_page: ARCHIVE_SCOPES,
+  list_databases: READ_SCOPES,
+  get_database: READ_SCOPES,
+  query_records: READ_SCOPES,
+  create_database: WRITE_SCOPES,
+  update_database_schema: WRITE_SCOPES,
+  create_record: WRITE_SCOPES,
+  update_record: WRITE_SCOPES,
+  list_comments: READ_SCOPES,
+  add_comment: WRITE_SCOPES,
+};
 
 const MAX_TEXT = 100_000;
 const UNTRUSTED =

@@ -10,6 +10,7 @@ staging at production bindings. All commands run from `apps/server` with
 ```bash
 npx wrangler secret put BETTER_AUTH_SECRET --env production     # 32+ random bytes
 npx wrangler secret put CONSENT_SECRET --env production
+npx wrangler secret put ADMIN_TOKEN --env production          # enables /api/admin/backup|restore
 npx wrangler secret put GOOGLE_CLIENT_ID --env production
 npx wrangler secret put GOOGLE_CLIENT_SECRET --env production
 # optional, enables Sign in with Apple
@@ -45,9 +46,36 @@ node scripts/bootstrap.mjs --remote --env production --email owner@example.com -
 
 ## Backups and restore
 
-See the backup section below (nightly D1 export + Durable Object document snapshots to R2) and the
-restore drill script. A backup is only trusted after a restore drill compares restored content with
-the source.
+What is backed up, and how:
+
+| Data | Backup | Restore |
+|------|--------|---------|
+| D1 metadata (users, workspaces, pages, records, comments, grants…) | D1 Time Travel (point in time, 30 days) + a nightly data export by the operator | `wrangler d1 time-travel restore`, or apply migrations to an empty DB and import the data export |
+| Page bodies (Durable Objects) | Daily cron (`scheduled.ts` → `backup.ts`) copies the Yjs state of every page edited since its last backup to R2 `backups/docs/<ws>/<page>.yjs`; `doc_backups` records revision and key | `POST /api/admin/restore` (Bearer `ADMIN_TOKEN`) merges each backed-up state into its page object; idempotent |
+| Search index | Not backed up: derived. Restored bodies re-project automatically | — |
+| Attachments (R2 `ws/…`) | R2 durability; not copied | — |
+
+Nightly D1 data export (excludes the FTS virtual table, which D1 export cannot include; rows are re-indexed by triggers on import):
+
+```bash
+npx wrangler d1 export DB --remote --env production --no-schema --output d1-$(date +%F).sql \
+  $(for t in user session account verification workspaces members invitations pages databases database_views favorites recents comments attachments agent_grants audit_events doc_sessions doc_backups search_docs; do printf -- "--table %s " $t; done)
+npx wrangler r2 object put workspace-files/backups/d1/d1-$(date +%F).sql --file d1-$(date +%F).sql --remote --env production
+```
+
+`search_docs.body` values can exceed D1's 100 KB statement limit on import; blank them in the export (or import
+with bodies omitted) and let restored pages re-project.
+
+**Restore drill** (required before trusting backups; run after schema changes):
+
+```bash
+node scripts/restore-drill.mjs --source .wrangler/perf-state --email perf@example.test
+```
+
+It backs up bodies in a source environment, exports D1 data, builds an empty isolated environment (migrations +
+data import + backup objects), restores bodies, then checks every table row-for-row, every backed-up body and a
+100-page sample through the API, and that search works. Last run (2026-10-26, local): `ok: true`, 19 tables /
+20,060 rows identical, 2 bodies restored identical, 100 sampled pages identical, search returned results.
 
 ## Diagnosing
 

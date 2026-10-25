@@ -386,7 +386,8 @@ function sortKeys(schema: PropertyDef[], sorts: Sort[]): SortKey[] {
     const value = def.type === "number" || def.type === "checkbox" ? `COALESCE(${x}, 0)` : `COALESCE(substr(lower(${x}), 1, 100), '')`;
     keys.push({ sql: value, params: [], desc });
   }
-  keys.push({ sql: "p.created_at", params: [], desc: false }, { sql: "p.id", params: [], desc: false });
+  // Ties: creation time, then fractional position (keeps CSV import order), then id.
+  keys.push({ sql: "p.created_at", params: [], desc: false }, { sql: "p.position", params: [], desc: false }, { sql: "p.id", params: [], desc: false });
   return keys;
 }
 
@@ -539,7 +540,7 @@ export async function importCsv(
       env.DB.prepare(
         `INSERT INTO pages (id, workspace_id, parent_id, database_id, title, position, props, created_by, created_at, updated_by, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(id, workspaceId, database.id, database.id, title, positions[i]!, JSON.stringify(props), actor.userId, t + i, actor.userId, t + i),
+      ).bind(id, workspaceId, database.id, database.id, title, positions[i]!, JSON.stringify(props), actor.userId, t, actor.userId, t),
       env.DB.prepare("INSERT INTO search_docs (page_id, workspace_id, title) VALUES (?, ?, ?)").bind(id, workspaceId, title),
     );
     imported++;
