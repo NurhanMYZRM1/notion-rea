@@ -5,7 +5,7 @@ Resume here. Plan: [plans/workspace-blueprint.md](../plans/workspace-blueprint.m
 
 ## Decisions and inputs
 
-- Cloudflare account: `Syedakmalhadif@gmail.com's Account` (`f51018eeed73777b08a81d5ca30ab318`), chosen by the user.
+- Cloudflare account: **`Paragonxplays@gmail.com's Account` (`636b468ba739e81c9a875f1c56f5d7bb`)**, switched 2026-10-26 at the user's request (the Syedakmalhadif account only granted a single-Worker policy). Hostnames: `workspace-staging.paragonxplays.workers.dev`, `workspace.paragonxplays.workers.dev`. D1 staging `040195a7-d4b3-44c0-9b45-2f15da92128d`, production `6e6f2055-a3db-4116-be97-77699d3827b8`; KV `workspace-<env>-oauth`.
 - Initial owner: `paragonxplays@gmail.com` (bootstrap command, not auto-membership).
 - Google OAuth client: not created yet (user will add secrets via `wrangler secret put`).
 - Toolchain verified 2026-10-25: Node 26.10, pnpm 12.15, Xcode 27.1 + iPhone 17 Pro simulator (iOS 26.5),
@@ -38,7 +38,7 @@ Resume here. Plan: [plans/workspace-blueprint.md](../plans/workspace-blueprint.m
 
 ## Open blockers / external inputs
 
-- **Cloudflare permissions (deploy blocker, rechecked 2026-10-26 after the user reported it fixed):** `/memberships` still returns `Syedakmalhadif@gmail.com's Account | accepted | Individual Workers Editor` ("Update and deploy a single Worker"). on account f51018ee… the login is only "Individual Workers Editor"; `wrangler d1 list` / `r2 bucket list` / `kv namespace list` fail with `Authentication error [code: 10000]` (checked 2026-10-26). User chose to keep this account and get a role covering Workers, D1, KV and R2 from its super admin. Next action after they confirm: create `workspace-staging` and `workspace` D1/R2/KV, fill ids in `wrangler.jsonc` envs, migrate, deploy.
+- **R2 not enabled** on the Paragonxplays account (`Please enable R2 through the Cloudflare Dashboard [code: 10042]`); the user is enabling it. Then: `node scripts/provision.mjs --env staging`, verify, `--env production`.
 
 - Google OAuth client ID/secret (web + iOS + Android client IDs) — needed for real sign-in.
 - Apple Sign in config (Services ID, key) — iOS release dependency.

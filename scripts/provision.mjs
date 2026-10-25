@@ -6,7 +6,7 @@
 //   4. build SPA + Worker for that env and deploy, uploading generated secrets that don't exist yet
 //      (BETTER_AUTH_SECRET, CONSENT_SECRET, ADMIN_TOKEN) in the same version — never printed
 //
-//   CLOUDFLARE_ACCOUNT_ID=f51018eeed73777b08a81d5ca30ab318 node scripts/provision.mjs --env staging
+//   CLOUDFLARE_ACCOUNT_ID=636b468ba739e81c9a875f1c56f5d7bb node scripts/provision.mjs --env staging
 // Re-running is safe: existing resources and secrets are reused.
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -30,10 +30,15 @@ const names = { worker: env === "production" ? "workspace" : "workspace-staging"
 
 // 1. resources
 const d1 = JSON.parse(run(["d1", "list", "--json"])).find((d) => d.name === names.d1) ?? (run(["d1", "create", names.d1]), JSON.parse(run(["d1", "list", "--json"])).find((d) => d.name === names.d1));
-const buckets = run(["r2", "bucket", "list"]);
-if (!buckets.includes(`name:           ${names.r2}`) && !new RegExp(`\\b${names.r2}\\b`).test(buckets)) run(["r2", "bucket", "create", names.r2]);
 const kvList = () => JSON.parse(run(["kv", "namespace", "list"]));
 const kv = kvList().find((n) => n.title === names.kv) ?? (run(["kv", "namespace", "create", names.kv]), kvList().find((n) => n.title === names.kv));
+let buckets;
+try {
+  buckets = run(["r2", "bucket", "list"], { stdio: ["pipe", "pipe", "pipe"] });
+} catch (err) {
+  throw new Error(`R2 is not available on this account (${String(err.stderr ?? err).match(/Please enable R2[^\n]*/)?.[0] ?? "see wrangler output"}). Enable it in the dashboard (R2 > Overview) and re-run.`);
+}
+if (!new RegExp(`\\b${names.r2}\\b`).test(buckets)) run(["r2", "bucket", "create", names.r2]);
 if (!d1?.uuid || !kv?.id) throw new Error("could not find/create D1 or KV");
 
 // workers.dev subdomain → PUBLIC_URL (custom domains: set PUBLIC_URL by hand afterwards)

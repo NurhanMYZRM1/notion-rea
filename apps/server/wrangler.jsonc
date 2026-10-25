@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "workspace-dev",
   "main": "src/index.ts",
-  "account_id": "f51018eeed73777b08a81d5ca30ab318",
+  "account_id": "636b468ba739e81c9a875f1c56f5d7bb",
   "compatibility_date": "2026-10-20",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "observability": { "enabled": true },

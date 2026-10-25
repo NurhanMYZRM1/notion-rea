@@ -3,7 +3,7 @@
 Environments live in `apps/server/wrangler.jsonc`: top level = local development, `env.staging`, and
 `env.production`. Each has its own Worker name, D1 database, R2 bucket and KV namespace. Never point
 staging at production bindings. All commands run from `apps/server` with
-`CLOUDFLARE_ACCOUNT_ID=f51018eeed73777b08a81d5ca30ab318`.
+`CLOUDFLARE_ACCOUNT_ID=636b468ba739e81c9a875f1c56f5d7bb`.
 
 ## Secrets (per environment, never in the repo or client bundles)
 
