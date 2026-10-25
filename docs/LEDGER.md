@@ -22,12 +22,12 @@ Resume here. Plan: [plans/workspace-blueprint.md](../plans/workspace-blueprint.m
 |------|-------|----------|
 | A Discovery, matrix, blueprint | done | docs/research, plans/ |
 | S1 core + Worker + DOs | done | `apps/server` sync tests 7/7, core 13/13, editor encoding 2/2 |
-| S2 auth, invitations, roles | code done; server-verification agent stopped mid-run (WIP tests/fixes in apps/server, unverified) | |
+| S2 auth, invitations, roles | done | server suite 221/221 (authz matrix, isolation, invitations, members, pages, attachments, databases incl. 10k rows, search, MCP/OAuth, backup, compaction, archive) |
 | S3 web app | partial (agent stopped at usage limit; files in apps/web uncommitted-then-committed as WIP, unverified) | |
-| S4 MCP + OAuth | Codex: real OAuth login (DCR) + workspace_info/create_page/read_page verified locally 2026-10-26; Claude Code: project server added, approval/login not finished | CIMD opt-in (`OAUTH_CIMD`), chatgpt.com returns 403 to workerd |
+| S4 MCP + OAuth | done locally; deployed check pending | `test/mcp.test.ts` 8/8; real Codex + Claude Code OAuth login and read/write tool calls verified 2026-10-26 (docs/MCP.md). CIMD opt-in; pre-dispatch per-tool scope step-up |
 | S5 databases/search/portability | API done, UI pending | |
 | S6 native app | partial (agent stopped at usage limit; apps/mobile WIP, unverified) | |
-| S7 hardening/deploy | pending | |
+| S7 hardening/deploy | backups + restore drill passing; deploy blocked on Cloudflare role | `scripts/restore-drill.mjs` ok (19 tables/20,060 rows identical); `scripts/provision.mjs` ready |
 
 ## Plan changes
 
@@ -38,7 +38,7 @@ Resume here. Plan: [plans/workspace-blueprint.md](../plans/workspace-blueprint.m
 
 ## Open blockers / external inputs
 
-- **Cloudflare permissions (deploy blocker):** on account f51018ee… the login is only "Individual Workers Editor"; `wrangler d1 list` / `r2 bucket list` / `kv namespace list` fail with `Authentication error [code: 10000]` (checked 2026-10-26). User chose to keep this account and get a role covering Workers, D1, KV and R2 from its super admin. Next action after they confirm: create `workspace-staging` and `workspace` D1/R2/KV, fill ids in `wrangler.jsonc` envs, migrate, deploy.
+- **Cloudflare permissions (deploy blocker, rechecked 2026-10-26 after the user reported it fixed):** `/memberships` still returns `Syedakmalhadif@gmail.com's Account | accepted | Individual Workers Editor` ("Update and deploy a single Worker"). on account f51018ee… the login is only "Individual Workers Editor"; `wrangler d1 list` / `r2 bucket list` / `kv namespace list` fail with `Authentication error [code: 10000]` (checked 2026-10-26). User chose to keep this account and get a role covering Workers, D1, KV and R2 from its super admin. Next action after they confirm: create `workspace-staging` and `workspace` D1/R2/KV, fill ids in `wrangler.jsonc` envs, migrate, deploy.
 
 - Google OAuth client ID/secret (web + iOS + Android client IDs) — needed for real sign-in.
 - Apple Sign in config (Services ID, key) — iOS release dependency.
