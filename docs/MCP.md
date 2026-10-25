@@ -48,6 +48,25 @@ codex mcp login workspace
 - Page content is user data. The server never treats it as instructions, and the tool descriptions tell
   the model the same.
 
+## Verification record
+
+Local (2026-10-26, `wrangler dev`, isolated state), both clients registering through dynamic client
+registration:
+
+| Client | Login | Tools exercised | Result |
+|--------|-------|-----------------|--------|
+| Codex 0.157.1 (`codex mcp add` + `codex mcp login`) | OAuth, consent approved for read/write/archive | `workspace_info`, `create_page` (idempotencyKey), `read_page` | page created with block ids, revision 1 |
+| Claude Code 2.1.306 (`claude mcp add --scope project` + `claude mcp login`; status ✔ Connected) | OAuth, consent approved for read/write | `workspace_info`, `search`, `read_page`, `edit_blocks` | found the Codex page, appended a paragraph, revision 2 |
+
+Server check afterwards: the page body was `[bulletList "first item from Codex", paragraph "Appended by Claude Code"]`
+and both agent connections showed in Agent connections with last-use times.
+
+Findings: Codex prefers a Client ID Metadata Document (`https://chatgpt.com/oauth/codex/client.json`), but
+chatgpt.com answers workerd's fetch with HTTP 403, so CIMD is off by default (`OAUTH_CIMD`) and Codex falls
+back to dynamic registration. MCP SDK v2's per-tool `scopeChallenge` only fires on the 2026 protocol path, so
+the Worker checks `tools/call` scopes before dispatch and returns the standard 403 `insufficient_scope`
+challenge for every client. Deployed verification is pending (see LEDGER).
+
 ## Compatibility
 
 Server: `agents` 0.30.1 `createMcpHandler` with `@modelcontextprotocol/server` 2.3.1 (MCP SDK v2),
