@@ -1,0 +1,33 @@
+{
+  "name": "web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p .",
+    "test": "echo 'web unit tests: none (see e2e)'",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.104.5",
+    "@tanstack/react-virtual": "3.14.22",
+    "@workspace/core": "workspace:*",
+    "@workspace/editor": "workspace:*",
+    "better-auth": "1.7.13",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "y-protocols": "1.0.7",
+    "yjs": "13.6.33"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.65.0",
+    "@playwright/test": "1.64.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "vite": "8.3.5",
+    "wrangler": "4.152.0"
+  }
+}

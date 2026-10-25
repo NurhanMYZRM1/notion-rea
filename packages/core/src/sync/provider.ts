@@ -45,6 +45,8 @@ export interface ProviderOptions {
 }
 
 const LOCAL_STORE = Symbol("store");
+// lib0 returns Uint8Array<ArrayBufferLike>; WebSocket.send wants an ArrayBuffer-backed view.
+const bytes = (u: Uint8Array) => u as Uint8Array<ArrayBuffer>;
 
 export class SyncProvider {
   readonly doc: Y.Doc;
@@ -174,7 +176,7 @@ export class SyncProvider {
 
   private send(message: Uint8Array, covers: number | null) {
     if (!this.ws || this.ws.readyState !== 1) return;
-    this.ws.send(message);
+    this.ws.send(bytes(message));
     if (covers !== null) this.inflight.push(covers);
   }
 
@@ -184,7 +186,7 @@ export class SyncProvider {
     const e = encoding.createEncoder();
     encoding.writeVarUint(e, MSG_AWARENESS);
     encoding.writeVarUint8Array(e, awarenessProtocol.encodeAwarenessUpdate(this.awareness, changed));
-    this.ws.send(encoding.toUint8Array(e));
+    this.ws.send(bytes(encoding.toUint8Array(e)));
   };
 
   private async open() {
@@ -207,7 +209,7 @@ export class SyncProvider {
       const e = encoding.createEncoder();
       encoding.writeVarUint(e, MSG_SYNC);
       syncProtocol.writeSyncStep1(e, this.doc);
-      ws.send(encoding.toUint8Array(e));
+      ws.send(bytes(encoding.toUint8Array(e)));
       if (this.awareness.getLocalState() !== null) this.onAwarenessUpdate({ added: [this.doc.clientID], updated: [], removed: [] }, null);
     };
     ws.addEventListener("message", (event: MessageEvent) => this.onMessage(new Uint8Array(event.data as ArrayBuffer)));

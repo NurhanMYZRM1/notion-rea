@@ -20,7 +20,8 @@ import {
   updateSchema,
   updateView,
 } from "./domain/databases";
-import { exportMarkdown, importMarkdown, readDocument } from "./domain/documents";
+import { EditOp } from "./domain/doc-edits";
+import { editDocument, exportMarkdown, importMarkdown, readDocument } from "./domain/documents";
 import { listGrants, revokeGrant } from "./domain/grants";
 import {
   acceptInvitation,
@@ -219,6 +220,11 @@ export function buildApp() {
     return c.json({ ok: true });
   });
   app.get("/api/pages/:id/document", async (c) => c.json(await readDocument(c.env, actorOf(c), pid(c))));
+  app.post("/api/pages/:id/edit", async (c) => {
+    const input = z.object({ expectedRevision: z.number().int().nonnegative().nullable().default(null), ops: z.array(EditOp).min(1).max(50) }).parse(await body(c));
+    const { revision, insertedIds, warnings, changed } = await editDocument(c.env, actorOf(c), pid(c), input.ops, input.expectedRevision);
+    return c.json({ revision, insertedIds, warnings, changed });
+  });
   app.get("/api/pages/:id/export.md", async (c) => {
     const result = await exportMarkdown(c.env, actorOf(c), pid(c));
     if (c.req.query("format") === "json") return c.json(result);

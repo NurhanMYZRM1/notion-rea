@@ -16,3 +16,7 @@ allowBuilds:
   esbuild: true
   workerd: true
   core-js-pure: false
+# One React for web, editor and the Expo app (Expo SDK 58 pins 19.3.0); two copies break hooks in the editor DOM component.
+overrides:
+  react: 19.3.0
+  react-dom: 19.3.0

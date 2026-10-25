@@ -1,0 +1,54 @@
+/* Editor styles. Colors come from the host app's tokens (--ws-*), with fallbacks. */
+.ws-editor { position: relative; --ws-fg: var(--fg, #1f1f1f); --ws-muted: var(--muted, #787774); --ws-line: var(--line, #e9e9e7); --ws-hover: var(--hover, rgba(55,53,47,.06)); --ws-accent: var(--accent, #2383e2); --ws-surface: var(--surface, #fff); --ws-code: var(--code-bg, rgba(135,131,120,.15)); }
+.ws-doc { outline: none; color: var(--ws-fg); font-size: 16px; line-height: 1.6; padding: 4px 0 30vh; min-height: 40vh; caret-color: var(--ws-fg); word-wrap: break-word; }
+.ws-doc > * + * { margin-top: 2px; }
+.ws-doc p { margin: 0; padding: 3px 2px; }
+.ws-doc h1, .ws-doc h2, .ws-doc h3 { margin: 1.1em 0 2px; padding: 3px 2px; font-weight: 600; line-height: 1.3; }
+.ws-doc h1 { font-size: 1.875em; } .ws-doc h2 { font-size: 1.5em; } .ws-doc h3 { font-size: 1.25em; }
+.ws-doc ul, .ws-doc ol { padding-left: 1.6em; margin: 0; }
+.ws-doc li > p { padding: 1px 2px; }
+.ws-doc ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
+.ws-doc ul[data-type="taskList"] li { display: flex; gap: 8px; align-items: flex-start; }
+.ws-doc ul[data-type="taskList"] li > label { margin-top: 5px; flex: none; }
+.ws-doc ul[data-type="taskList"] li > label input { width: 16px; height: 16px; accent-color: var(--ws-accent); }
+.ws-doc ul[data-type="taskList"] li[data-checked="true"] > div p { color: var(--ws-muted); text-decoration: line-through; }
+.ws-doc ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
+.ws-doc blockquote { margin: 4px 0; padding: 2px 14px; border-left: 3px solid var(--ws-fg); }
+.ws-doc pre { background: var(--ws-code); border-radius: 6px; padding: 14px 16px; margin: 6px 0; overflow-x: auto; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; tab-size: 2; }
+.ws-doc code { background: var(--ws-code); border-radius: 4px; padding: 0.15em 0.35em; font: 0.85em ui-monospace, SFMono-Regular, Menlo, monospace; color: #eb5757; }
+.ws-doc pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+.ws-doc hr { border: none; border-top: 1px solid var(--ws-line); margin: 14px 0; }
+.ws-doc a { color: inherit; text-decoration: underline; text-decoration-color: var(--ws-muted); text-underline-offset: 2px; }
+.ws-doc .is-empty::before { content: attr(data-placeholder); color: var(--ws-muted); pointer-events: none; float: left; height: 0; }
+.ws-doc details.toggle { margin: 2px 0; }
+.ws-doc [data-type="details"] { display: flex; gap: 4px; }
+.ws-doc [data-type="details"] > button { flex: none; width: 24px; height: 28px; border: none; background: none; color: var(--ws-fg); cursor: pointer; border-radius: 4px; }
+.ws-doc [data-type="details"] > button::before { content: "▸"; display: inline-block; transition: transform .1s; }
+.ws-doc [data-type="details"].is-open > button::before { transform: rotate(90deg); }
+.ws-doc [data-type="details"] > div { flex: 1; min-width: 0; }
+.ws-doc [data-type="details"]:not(.is-open) [data-type="detailsContent"] { display: none; }
+.ws-image { margin: 8px 0; } .ws-image img { max-width: 100%; height: auto; border-radius: 4px; display: block; }
+.ws-image.is-missing { padding: 24px; border: 1px dashed var(--ws-line); color: var(--ws-muted); text-align: center; }
+.file-attachment { padding: 6px 8px; border-radius: 4px; } .file-attachment:hover { background: var(--ws-hover); }
+.file-attachment .file-size { color: var(--ws-muted); font-size: 13px; }
+.ProseMirror-selectednode { outline: 2px solid var(--ws-accent); border-radius: 3px; }
+.collaboration-carets__caret { position: relative; margin: 0 -1px; border-left: 1px solid; border-right: 1px solid; word-break: normal; pointer-events: none; }
+.collaboration-carets__label { position: absolute; top: -1.4em; left: -1px; font-size: 11px; font-weight: 600; line-height: normal; white-space: nowrap; color: #fff; padding: 1px 4px; border-radius: 3px 3px 3px 0; user-select: none; }
+.ws-handle button { width: 24px; height: 24px; border: none; background: none; color: var(--ws-muted); border-radius: 4px; cursor: grab; font-size: 13px; letter-spacing: -2px; }
+.ws-handle button:hover, .ws-handle button:focus-visible { background: var(--ws-hover); }
+.ws-block-menu, .ws-slash, .ws-bubble { background: var(--ws-surface); border: 1px solid var(--ws-line); border-radius: 8px; box-shadow: 0 4px 18px rgba(0,0,0,.12); padding: 4px; z-index: 50; }
+.ws-block-menu { position: absolute; left: 26px; top: 0; min-width: 180px; display: flex; flex-direction: column; }
+.ws-block-menu button, .ws-slash button { display: flex; flex-direction: column; align-items: flex-start; width: 100%; text-align: left; border: none; background: none; color: var(--ws-fg); padding: 6px 10px; border-radius: 5px; font: inherit; font-size: 14px; cursor: pointer; min-height: 32px; letter-spacing: normal; }
+.ws-block-menu button:hover, .ws-slash button.is-active, .ws-slash button:hover { background: var(--ws-hover); }
+.ws-block-menu .danger { color: #d44c47; }
+.ws-slash { width: 280px; max-height: 320px; overflow-y: auto; }
+.ws-slash-hint { color: var(--ws-muted); font-size: 12px; } .ws-slash-empty { padding: 8px 10px; color: var(--ws-muted); font-size: 14px; }
+.ws-bubble { display: flex; gap: 2px; align-items: center; }
+.ws-bubble button, .ws-fixed-toolbar button { min-width: 32px; height: 32px; border: none; background: none; color: var(--ws-fg); border-radius: 5px; cursor: pointer; font: inherit; font-size: 14px; }
+.ws-bubble button.is-active, .ws-fixed-toolbar button.is-active { color: var(--ws-accent); background: var(--ws-hover); }
+.ws-bubble button:hover { background: var(--ws-hover); }
+.ws-link-input input { height: 30px; border: 1px solid var(--ws-line); border-radius: 5px; padding: 0 8px; background: var(--ws-surface); color: var(--ws-fg); width: 220px; }
+.ws-fixed-toolbar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 2px; overflow-x: auto; padding: 4px 8px calc(4px + env(safe-area-inset-bottom)); background: var(--ws-surface); border-top: 1px solid var(--ws-line); z-index: 40; }
+.ws-fixed-toolbar button { min-width: 44px; height: 44px; font-size: 17px; }
+.has-fixed-toolbar .ws-doc { padding-bottom: 50vh; }
+:where(.ws-editor) button:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 1px; }
