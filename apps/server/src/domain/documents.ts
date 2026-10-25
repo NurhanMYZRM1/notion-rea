@@ -54,7 +54,7 @@ export async function editDocument(
   if (needsExpectedRevision(ops) && expectedRevision === null) {
     throw new AppError("invalid_input", "replace, update_text and delete need expectedRevision (from the last read)");
   }
-  const result = await page(env, pageId).edit(pageId, ops, expectedRevision);
+  const result = await page(env, pageId).edit(pageId, ops, expectedRevision, access.page.state);
   if ("error" in result) throw new AppError(result.error.code, result.error.message, result.error.details);
   if (result.changed) await audit(env, access, "document.edit", pageId, { ops: ops.map((o) => o.op) });
   return result;

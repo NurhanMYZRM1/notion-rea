@@ -19,6 +19,7 @@ import {
   type ViewConfig,
   type ViewInfo,
 } from "@workspace/core";
+import { generateNKeysBetween } from "fractional-indexing";
 import { AppError, conflict, notFound } from "../errors";
 import { pageUrl } from "../util";
 import { type Actor, audit, requireAccess, requirePageAccess } from "./access";
@@ -151,7 +152,12 @@ export async function updateView(env: Env, actor: Actor, databaseId: string, vie
   const res = await env.DB.prepare("UPDATE database_views SET name = ?, type = ?, config = ?, revision = revision + 1 WHERE id = ? AND revision = ?")
     .bind(next.name, next.type, JSON.stringify(next.config), viewId, input.expectedRevision)
     .run();
-  if (!res.meta.changes) throw conflict("View was changed by someone else");
+  if (!res.meta.changes) {
+    const current = await env.DB.prepare("SELECT id, name, type, config, revision FROM database_views WHERE id = ?")
+      .bind(viewId)
+      .first<{ id: string; name: string; type: "table" | "board"; config: string; revision: number }>();
+    throw conflict("View was changed by someone else", current ? { ...current, config: JSON.parse(current.config) as ViewConfig } : undefined);
+  }
   await publish(env, access.workspaceId, [["database", databaseId]]);
   return { id: viewId, ...next, revision: view.revision + 1 };
 }
@@ -367,23 +373,32 @@ function sortKeys(schema: PropertyDef[], sorts: Sort[]): SortKey[] {
     if (def.type === "select" || def.type === "status") {
       const opts = def.options ?? [];
       const sql = opts.length ? `CASE ${x} ${opts.map(() => "WHEN ? THEN ?").join(" ")} ELSE ${opts.length} END` : "0";
+      // Empty (or no longer valid) options sort last in both directions, like other types.
+      keys.push({ sql: `CASE WHEN (${sql}) = ${opts.length} THEN 1 ELSE 0 END`, params: opts.flatMap((o, i) => [o.id, i]), desc: false });
       keys.push({ sql, params: opts.flatMap((o, i) => [o.id, i]), desc });
       continue;
     }
     // Empty values sort last in both directions.
-    const empty = def.type === "number" || def.type === "checkbox" ? `(${x} IS NULL)` : `(${x} IS NULL OR ${x} = '')`;
+    // An unset checkbox is false, not empty.
+    const empty = def.type === "checkbox" ? "0" : def.type === "number" ? `(${x} IS NULL)` : `(${x} IS NULL OR ${x} = '')`;
     keys.push({ sql: `CASE WHEN ${empty} THEN 1 ELSE 0 END`, params: [], desc: false });
-    const value = def.type === "number" ? `COALESCE(${x}, 0)` : def.type === "checkbox" ? `COALESCE(${x}, 0)` : `COALESCE(lower(${x}), '')`;
+    // Text keys compare on a 100-character prefix (ties fall to created_at/id) so cursors stay small.
+    const value = def.type === "number" || def.type === "checkbox" ? `COALESCE(${x}, 0)` : `COALESCE(substr(lower(${x}), 1, 100), '')`;
     keys.push({ sql: value, params: [], desc });
   }
   keys.push({ sql: "p.created_at", params: [], desc: false }, { sql: "p.id", params: [], desc: false });
   return keys;
 }
 
+/** base64 of UTF-8 JSON (btoa alone rejects non-Latin1 sort values). */
+function encodeCursor(values: unknown[]): string {
+  return btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(values))));
+}
+
 function decodeCursor(cursor: string | null, n: number): unknown[] | null {
   if (!cursor) return null;
   try {
-    const values = JSON.parse(atob(cursor)) as unknown;
+    const values = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(cursor), (c) => c.charCodeAt(0)))) as unknown;
     if (Array.isArray(values) && values.length === n && values.every((v) => typeof v === "string" || typeof v === "number")) return values;
   } catch {
     /* fall through */
@@ -426,7 +441,7 @@ export async function queryRecords(
     .all<RecordDbRow & Record<string, string | number>>();
   const page = rows.results.slice(0, input.limit);
   const last = page.at(-1);
-  const nextCursor = rows.results.length > input.limit && last ? btoa(JSON.stringify(keys.map((_, i) => last[`k${i}`]))) : null;
+  const nextCursor = rows.results.length > input.limit && last ? encodeCursor(keys.map((_, i) => last[`k${i}`])) : null;
   return { records: page.map((r) => toRecord(env, schema, r)), nextCursor, schemaRevision: db.revision };
 }
 
@@ -473,16 +488,18 @@ export async function importCsv(
   if (header.length > 50) throw new AppError("invalid_input", "CSV has more than 50 columns");
   const warnings: string[] = [];
   const rejected: { row: number; reason: string }[] = [];
+  const rowNumbers: number[] = []; // original CSV row of each good row (header is row 1)
   const good = rows.filter((r, i) => {
     if (r.length !== header.length) {
       rejected.push({ row: i + 2, reason: `expected ${header.length} columns, found ${r.length}` });
       return false;
     }
+    rowNumbers.push(i + 2);
     return true;
   });
   const schema: PropertyDef[] = header.map((name, col) => {
     const clean = name.trim().slice(0, 100) || `Column ${col + 1}`;
-    const id = col === 0 ? "p_title" : `p_c${col}${Math.random().toString(36).slice(2, 6)}`;
+    const id = col === 0 ? "p_title" : newId("p", 12);
     if (col === 0) return { id, name: clean, type: "title" };
     const values = good.map((r) => r[col]!.trim()).filter(Boolean);
     if (values.length && values.every((v) => /^-?\d+(\.\d+)?$/.test(v))) return { id, name: clean, type: "number" };
@@ -491,7 +508,7 @@ export async function importCsv(
     if (values.length && values.every((v) => /^https?:\/\/\S+$/i.test(v))) return { id, name: clean, type: "url" };
     const distinct = [...new Set(values)];
     if (values.length >= 4 && distinct.length <= Math.min(20, values.length / 2)) {
-      return { id, name: clean, type: "select", options: distinct.map((d, i) => ({ id: `o_${i}${Math.random().toString(36).slice(2, 6)}`, name: d.slice(0, 100), color: "gray" as const })) };
+      return { id, name: clean, type: "select", options: distinct.map((d) => ({ id: newId("o", 12), name: d.slice(0, 100), color: "gray" as const })) };
     }
     return { id, name: clean, type: "text" };
   });
@@ -499,7 +516,8 @@ export async function importCsv(
   const t = Date.now();
   const statements: D1PreparedStatement[] = [];
   let imported = 0;
-  let position = 0;
+  // Real fractional-index keys, so records added later can be positioned after them.
+  const positions = generateNKeysBetween(null, null, good.length);
   good.forEach((r, i) => {
     const props: Record<string, PropertyValue> = {};
     try {
@@ -512,7 +530,7 @@ export async function importCsv(
         props[def.id] = normalizeValue(def, parsed);
       });
     } catch (err) {
-      rejected.push({ row: i + 2, reason: (err as Error).message });
+      rejected.push({ row: rowNumbers[i]!, reason: (err as Error).message });
       return;
     }
     const title = r[0]!.slice(0, 500);
@@ -521,12 +539,13 @@ export async function importCsv(
       env.DB.prepare(
         `INSERT INTO pages (id, workspace_id, parent_id, database_id, title, position, props, created_by, created_at, updated_by, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(id, workspaceId, database.id, database.id, title, `a${String(position++).padStart(6, "0")}`, JSON.stringify(props), actor.userId, t + i, actor.userId, t + i),
+      ).bind(id, workspaceId, database.id, database.id, title, positions[i]!, JSON.stringify(props), actor.userId, t + i, actor.userId, t + i),
       env.DB.prepare("INSERT INTO search_docs (page_id, workspace_id, title) VALUES (?, ?, ?)").bind(id, workspaceId, title),
     );
     imported++;
   });
   for (let i = 0; i < statements.length; i += 100) await env.DB.batch(statements.slice(i, i + 100));
+  rejected.sort((a, b) => a.row - b.row);
   if (rejected.length) warnings.push(`${rejected.length} row(s) were rejected; see the list below.`);
   await publish(env, workspaceId, [["database", database.id]]);
   return { database, imported, rejected: rejected.slice(0, 500), warnings };

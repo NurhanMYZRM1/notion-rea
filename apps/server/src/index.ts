@@ -23,7 +23,9 @@ const provider = new OAuthProvider<Env>({
   authorizeEndpoint: "/authorize",
   tokenEndpoint: "/oauth/token",
   clientRegistrationEndpoint: "/oauth/register",
-  clientIdMetadataDocumentEnabled: true,
+  // CIMD needs the Worker to fetch the client's metadata URL. chatgpt.com (Codex) answers workerd with 403,
+  // so it is opt-in; dynamic client registration works for Claude Code and Codex.
+  clientIdMetadataDocumentEnabled: moduleEnv.OAUTH_CIMD === "enabled",
   scopesSupported: [...AGENT_SCOPES, "offline_access"],
   requiredScopes: ["workspace:read"],
   resourceMetadata: { resource: `${moduleEnv.PUBLIC_URL}/mcp`, authorization_servers: [moduleEnv.PUBLIC_URL] },

@@ -21,7 +21,13 @@ export async function upload(
   const name = file.name.replace(/[\u0000-\u001f\\/]/g, "_").slice(0, 200) || "file";
   const id = newId("at");
   const key = `ws/${access.workspaceId}/${id}`;
-  const stored = await env.FILES.put(key, file.body, { httpMetadata: { contentType: type } });
+  let stored: R2Object | null = null;
+  try {
+    stored = await env.FILES.put(key, file.body, { httpMetadata: { contentType: type } });
+  } catch (err) {
+    // FixedLengthStream / client-disconnect errors are TypeErrors: the body did not match Content-Length.
+    if (!(err instanceof TypeError)) throw err;
+  }
   if (!stored || stored.size !== file.size) {
     await env.FILES.delete(key);
     throw new AppError("invalid_input", "Upload size did not match the declared size");

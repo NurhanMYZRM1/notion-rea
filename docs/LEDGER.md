@@ -22,11 +22,11 @@ Resume here. Plan: [plans/workspace-blueprint.md](../plans/workspace-blueprint.m
 |------|-------|----------|
 | A Discovery, matrix, blueprint | done | docs/research, plans/ |
 | S1 core + Worker + DOs | done | `apps/server` sync tests 7/7, core 13/13, editor encoding 2/2 |
-| S2 auth, invitations, roles | code done, tests pending | |
-| S3 web app | in progress | |
-| S4 MCP + OAuth | code done, tests + real clients pending | |
+| S2 auth, invitations, roles | code done; server-verification agent stopped mid-run (WIP tests/fixes in apps/server, unverified) | |
+| S3 web app | partial (agent stopped at usage limit; files in apps/web uncommitted-then-committed as WIP, unverified) | |
+| S4 MCP + OAuth | Codex: real OAuth login (DCR) + workspace_info/create_page/read_page verified locally 2026-10-26; Claude Code: project server added, approval/login not finished | CIMD opt-in (`OAUTH_CIMD`), chatgpt.com returns 403 to workerd |
 | S5 databases/search/portability | API done, UI pending | |
-| S6 native app | pending | |
+| S6 native app | partial (agent stopped at usage limit; apps/mobile WIP, unverified) | |
 | S7 hardening/deploy | pending | |
 
 ## Plan changes
@@ -44,3 +44,10 @@ Resume here. Plan: [plans/workspace-blueprint.md](../plans/workspace-blueprint.m
 - Apple Sign in config (Services ID, key) — iOS release dependency.
 - Play Console + App Store Connect access, app identifiers, signing — store testing channels.
 - Physical Android (3–4 GB) and iPhone SE 2-class device — performance gate.
+
+## Resume checklist (stopped 2026-10-26 at usage limit)
+
+1. `git log -1` is a WIP snapshot. Run `pnpm --filter server test`, `pnpm -r typecheck`, `pnpm --filter web build` and fix what the stopped agents left half-done (apps/web, apps/mobile, apps/server/test).
+2. Wire `src/backup.ts` into `scheduled.ts` + admin routes `POST /api/admin/backup|restore` (Bearer `ADMIN_TOKEN`), then run `node scripts/restore-drill.mjs`.
+3. Claude Code MCP check: in `/tmp/claude-mcp-test` approve the project server in `claude` (arrow down to "Yes, I trust this folder"), then `claude mcp login workspace-local`; local test backend: `wrangler dev --port 8794 --var PUBLIC_URL:http://localhost:8794 --persist-to ../../.wrangler/mcp-state`. Remove `workspace-local` from `~/.codex/config.toml` afterwards (`codex mcp remove workspace-local`).
+4. Deployment after the Cloudflare role is granted: add `env.staging`/`env.production` to wrangler.jsonc, create D1/R2/KV, migrate, set secrets, deploy (docs/OPERATIONS.md).

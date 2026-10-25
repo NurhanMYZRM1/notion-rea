@@ -14,7 +14,8 @@
   "vars": {
     "ENVIRONMENT": "development",
     "PUBLIC_URL": "http://localhost:5173",
-    "TEST_LOGIN": "enabled"
+    "TEST_LOGIN": "enabled",
+    "OAUTH_CIMD": "disabled"
   },
   "d1_databases": [{ "binding": "DB", "database_name": "workspace-dev", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }],
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "workspace-dev-files" }],

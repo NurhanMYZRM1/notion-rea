@@ -7,7 +7,7 @@
     "ios": "expo run:ios",
     "android": "expo run:android",
     "typecheck": "tsc -p .",
-    "test": "echo 'mobile: see maestro/ flows'"
+    "test": "node --test test/"
   },
   "dependencies": {
     "@better-auth/expo": "1.7.13",

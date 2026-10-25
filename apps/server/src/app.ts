@@ -242,7 +242,13 @@ export function buildApp() {
   app.post("/api/pages/:id/attachments", async (c) => {
     const size = Number(c.req.header("Content-Length") ?? 0);
     if (!size || size > MAX_UPLOAD_BYTES) throw new AppError("too_large", `Files must be between 1 byte and ${MAX_UPLOAD_BYTES / 1024 / 1024} MB`);
-    const name = decodeURIComponent(c.req.header("X-File-Name") ?? "file");
+    const rawName = c.req.header("X-File-Name") ?? "file";
+    let name = rawName;
+    try {
+      name = decodeURIComponent(rawName);
+    } catch {
+      /* not percent-encoded: keep as sent (sanitized in upload) */
+    }
     const body = c.req.raw.body;
     if (!body) throw new AppError("invalid_input", "Empty upload");
     // R2 needs a known length; FixedLengthStream enforces that the body matches Content-Length.

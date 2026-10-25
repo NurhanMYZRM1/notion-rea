@@ -144,7 +144,16 @@ export interface MenuItem {
   disabledReason?: string | null;
 }
 
-export function Menu(props: { label: string; children: ReactNode; items: (MenuItem | null | false)[]; className?: string; align?: "left" | "right" }) {
+export function Menu(props: {
+  label: string;
+  children: ReactNode;
+  items: (MenuItem | null | false)[];
+  className?: string;
+  buttonClassName?: string;
+  /** Visible text already names the button: don't override it with aria-label. */
+  labelledByContent?: boolean;
+  align?: "left" | "right";
+}) {
   const [open, setOpen] = useState(false);
   const btn = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -184,9 +193,9 @@ export function Menu(props: { label: string; children: ReactNode; items: (MenuIt
       <button
         ref={btn}
         type="button"
-        className="icon-btn"
-        aria-label={props.label}
-        title={props.label}
+        className={props.buttonClassName ?? "icon-btn"}
+        aria-label={props.labelledByContent ? undefined : props.label}
+        title={props.labelledByContent ? undefined : props.label}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
@@ -245,6 +254,7 @@ export function OnlineButton({ onClick, className, children, offlineReason = OFF
         title={online ? rest.title : offlineReason}
         onClick={(e) => {
           if (!navigator.onLine) {
+            e.preventDefault();
             toast(offlineReason);
             return;
           }
@@ -267,6 +277,14 @@ export function Spinner({ label = "Loading" }: { label?: string }) {
     <div className="spinner-wrap" role="status">
       <span className="spinner" aria-hidden="true" />
       <span className="sr-only">{label}</span>
+    </div>
+  );
+}
+
+export function Splash() {
+  return (
+    <div className="splash">
+      <Spinner />
     </div>
   );
 }

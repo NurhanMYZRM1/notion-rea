@@ -1,7 +1,7 @@
 import { CreateInvitationInput, type InvitationInfo, type MemberInfo, newId, type Role, UpdateMemberInput, type WorkspaceInfo } from "@workspace/core";
 import { AppError, forbidden, notFound } from "../errors";
 import { randomToken, sha256Hex } from "../util";
-import { type Actor, audit, requireAccess } from "./access";
+import { type Actor, audit, requireAccess, roleOf } from "./access";
 import { page, publish } from "./pages";
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -124,7 +124,8 @@ export async function acceptInvitation(
   if (!claim!.meta.changes) throw new AppError("gone", "This invitation has already been used");
   await audit(env, { workspaceId: inv.workspace_id, actor: { kind: "user", userId: user.id } }, "member.join", user.id, { role: inv.role });
   await publish(env, inv.workspace_id, [["members"]]);
-  return { workspaceId: inv.workspace_id, role: inv.role };
+  // Report the role actually held: an existing owner keeps ownership when accepting a lesser invitation.
+  return { workspaceId: inv.workspace_id, role: (await roleOf(env, inv.workspace_id, user.id)) ?? inv.role };
 }
 
 function maskEmail(email: string): string {

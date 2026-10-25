@@ -152,7 +152,8 @@ export async function createPage(
   const id = input.id ?? newId("pg");
   const existing = await getRow(env, id);
   if (existing) {
-    if (existing.workspace_id !== workspaceId) throw conflict("Id already in use");
+    // A tombstone's id is never reusable: that would resurrect a permanently deleted page.
+    if (existing.workspace_id !== workspaceId || existing.state === "deleted") throw conflict("Id already in use");
   } else {
     const t = Date.now();
     const position = await positionAfter(env, workspaceId, input.parentId, input.afterId);
@@ -197,6 +198,7 @@ export async function updatePage(env: Env, actor: Actor, pageId: string, raw: un
 export async function movePage(env: Env, actor: Actor, pageId: string, raw: unknown): Promise<PageSummary> {
   const access = await requirePageAccess(env, actor, pageId, "write");
   const input = MovePageInput.parse(raw);
+  if (access.page.state !== "active") throw conflict("Page is in the trash; restore it first");
   const before = (await getRow(env, pageId))!;
   if (before.database_id) throw new AppError("unsupported", "Database records move with their database");
   if (input.parentId) {

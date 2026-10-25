@@ -46,7 +46,8 @@ export function toCsv(rows: (string | number | boolean | null)[][]): string {
   const cell = (v: string | number | boolean | null) => {
     const s = v == null ? "" : String(v);
     // Prefix formula-like cells so spreadsheets don't execute them (CSV injection).
-    const safe = /^[=+\-@\t\r]/.test(s) && !/^-?\d/.test(s) ? `'${s}` : s;
+    // Only plain numbers may start with "-": "-2+3+cmd|..." is still a formula.
+    const safe = /^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?(e[+-]?\d+)?$/i.test(s) ? `'${s}` : s;
     return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
   };
   return rows.map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n";

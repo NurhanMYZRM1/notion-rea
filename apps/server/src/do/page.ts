@@ -48,6 +48,10 @@ export class PageDocument extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.sql = ctx.storage.sql;
+    this.createTables();
+  }
+
+  private createTables(): void {
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, data BLOB NOT NULL);
       CREATE TABLE IF NOT EXISTS snapshot (idx INTEGER PRIMARY KEY, data BLOB NOT NULL);
@@ -338,8 +342,11 @@ export class PageDocument extends DurableObject<Env> {
     pageId: string,
     ops: EditOp[],
     expectedRevision: number | null,
+    /** Page state from D1 (authoritative); this object only hears about archive/restore while sockets are open. */
+    state?: string,
   ): Promise<{ revision: number; insertedIds: string[]; warnings: string[]; changed: boolean } | { error: ReturnType<AppError["toJSON"]>["error"] }> {
     try {
+      if (state && state !== this.meta("state")) this.setMeta("state", state);
       return this.editUnsafe(pageId, ops, expectedRevision);
     } catch (err) {
       // RPC drops custom error classes; return structured errors instead.
@@ -364,7 +371,7 @@ export class PageDocument extends DurableObject<Env> {
 
   /** Set initial content once (page create/import). Idempotent: retries after a partial failure are no-ops. */
   async initialize(pageId: string, workspaceId: string, doc: PMNode): Promise<{ revision: number; applied: boolean }> {
-    this.remember(pageId, workspaceId, "active");
+    this.remember(pageId, workspaceId, this.meta<string>("state") ?? "active");
     if (this.meta("initialized") || this.load().getXmlFragment(FRAGMENT).length > 0) return { revision: this.revision, applied: false };
     const scratch = new Y.Doc();
     scratch.getXmlFragment(FRAGMENT).insert(0, (doc.content ?? []).map(jsonToY));
@@ -392,6 +399,8 @@ export class PageDocument extends DurableObject<Env> {
     this.doc = null;
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
+    // deleteAll() drops the tables too; this instance may still get calls (socket close events, late RPCs).
+    this.createTables();
   }
 
   /** Full state for backups (D1 holds metadata; this is the canonical body). */
