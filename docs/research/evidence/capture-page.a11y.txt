@@ -1,0 +1,350 @@
+- document:
+  - navigation "Main":
+    - link "Notion – Home":
+      - /url: /product
+      - img
+    - button "Product":
+      - text: Product
+      - img
+    - button "Resources":
+      - text: Resources
+      - img
+    - link "Pricing":
+      - /url: /pricing
+    - link "Request a demo":
+      - /url: /contact-sales
+    - link "Log in":
+      - /url: /login?from=marketing&pathname=%2Fproduct%2Ffeatures&tid=8c0b707079094fa99e4e09dd5c839d6c
+    - link "Get Notion free":
+      - /url: /signup?from=marketing&pathname=%2Fproduct%2Ffeatures&tid=8c0b707079094fa99e4e09dd5c839d6c
+  - main:
+    - region "So, what can Notion do?":
+      - heading "So, what can Notion do?" [level=1]
+      - paragraph: Capture your team’s knowledge, find answers across all your apps, and automate your busywork.
+      - link "Get Notion free":
+        - /url: /signup?from=marketing&pathname=%2Fproduct%2Ffeatures&tid=8c0b707079094fa99e4e09dd5c839d6c
+      - link "Contact sales":
+        - /url: /contact-sales
+    - region "Capture knowledge.":
+      - heading "Capture knowledge." [level=2]
+      - paragraph: Meetings, decisions, processes, product specs. The notes take themselves, and documentation keeps itself up to date.
+      - img "AIMN Nosey SectionHeader-Support"
+      - img "Capture section image"
+      - group:
+        - article:
+          - heading "Docs" [level=3]:
+            - link "Docs":
+              - /url: https://www.notion.com/help/writing-and-editing-basics
+          - paragraph: Create block-based docs that flex from a note to a full spec.
+        - article:
+          - heading "Databases" [level=3]:
+            - link "Databases":
+              - /url: https://www.notion.com/help/intro-to-databases
+          - paragraph: Organize anything and connect it across your workspace.
+        - article:
+          - heading "AI Meeting Notes" [level=3]:
+            - link "AI Meeting Notes":
+              - /url: https://www.notion.com/product/ai-meeting-notes
+          - paragraph: Capture every meeting, in one shared workspace.
+      - group:
+        - article:
+          - heading "Real-time collaboration" [level=3]:
+            - link "Real-time collaboration":
+              - /url: https://www.notion.com/help/collaborate-with-people
+          - paragraph: Edit together live, with comments and instant updates.
+        - article:
+          - heading "Data syncs" [level=3]:
+            - link "Data syncs":
+              - /url: https://www.notion.com/help/synced-databases
+          - paragraph: Pull live Salesforce and Jira data right into Notion.
+        - article:
+          - heading "Forms" [level=3]:
+            - link "Forms":
+              - /url: https://www.notion.com/help/forms
+          - paragraph: Collect responses straight into your databases.
+      - group:
+        - article:
+          - heading "Imports" [level=3]:
+            - link "Imports":
+              - /url: https://www.notion.com/help/import-data-into-notion
+          - paragraph: Bring your work over from any tool in minutes.
+        - article:
+          - heading "Mobile apps" [level=3]:
+            - link "Mobile apps":
+              - /url: https://www.notion.com/help/notion-for-mobile
+          - paragraph: Capture and access your work from anywhere.
+        - article:
+          - heading "Web Clipper" [level=3]:
+            - link "Web Clipper":
+              - /url: https://www.notion.com/help/web-clipper
+          - paragraph: Save anything from the web to Notion in one click.
+    - region "Find answers.":
+      - heading "Find answers." [level=2]
+      - paragraph: Was that info in an email? Slide deck? Slack message? Just ask Notion.
+      - img "Research Nosey SectionHeader-Support"
+      - img "Find section image"
+      - group:
+        - article:
+          - heading "Enterprise Search" [level=3]:
+            - link "Enterprise Search":
+              - /url: https://www.notion.com/help/enterprise-search
+          - paragraph: Search across Notion, Slack, Jira, and more.
+        - article:
+          - heading "Wikis" [level=3]:
+            - link "Wikis":
+              - /url: https://www.notion.com/help/wikis-and-verified-pages
+          - paragraph: Keep your company knowledge in one verified home.
+        - article:
+          - heading "Teamspaces" [level=3]:
+            - link "Teamspaces":
+              - /url: https://www.notion.com/help/intro-to-teamspaces
+          - paragraph: Give every team a home for their work.
+      - group:
+        - article:
+          - heading "Verified pages" [level=3]:
+            - link "Verified pages":
+              - /url: https://www.notion.com/help/wikis-and-verified-pages
+          - paragraph: Show teams which content is trusted and current.
+        - article:
+          - heading "Charts and dashboards" [level=3]:
+            - link "Charts and dashboards":
+              - /url: https://www.notion.com/help/charts
+          - paragraph: Visualize your data and track progress at a glance.
+        - article:
+          - heading "Kanban and Gantt views" [level=3]:
+            - link "Kanban and Gantt views":
+              - /url: https://www.notion.com/help/views-filters-and-sorts
+          - paragraph: See your work as boards, timelines, and more.
+      - group:
+        - article:
+          - heading "Version history" [level=3]:
+            - link "Version history":
+              - /url: https://www.notion.com/help/duplicate-delete-and-restore-content
+          - paragraph: Track every change and restore earlier versions.
+        - article:
+          - heading "Backlinks" [level=3]:
+            - link "Backlinks":
+              - /url: https://www.notion.com/help/create-links-and-backlinks
+          - paragraph: See how every page connects across your workspace.
+        - article:
+          - heading "Link previews" [level=3]:
+            - link "Link previews":
+              - /url: https://www.notion.com/help/link-previews
+          - paragraph: Preview Figma, GitHub, and more inline.
+    - region "Automate busywork.":
+      - heading "Automate busywork." [level=2]
+      - paragraph: Agents own their own workflows 24/7, so you can focus on your life’s work.
+      - img "Custom Agents SectionHeader-Support"
+      - img "Automate section image"
+      - group:
+        - article:
+          - heading "Notion Agent" [level=3]:
+            - link "Notion Agent":
+              - /url: https://www.notion.com/help/notion-agent
+          - paragraph: Chat with your personal agent that takes action across your work.
+        - article:
+          - heading "Custom Agents" [level=3]:
+            - link "Custom Agents":
+              - /url: https://www.notion.com/help/custom-agents
+          - paragraph: Build always-on agents for your team's workflows.
+        - article:
+          - heading "AI writing and editing" [level=3]:
+            - link "AI writing and editing":
+              - /url: https://www.notion.com/help/notion-ai-faqs
+          - paragraph: Draft, edit, and polish your writing in seconds.
+      - group:
+        - article:
+          - heading "Agent Skills" [level=3]:
+            - link "Agent Skills":
+              - /url: https://www.notion.com/help/skills-for-notion-agent
+          - paragraph: Use repeatable playbooks that teach agents how you work.
+        - article:
+          - heading "Dynamic triggers" [level=3]:
+            - link "Dynamic triggers":
+              - /url: https://www.notion.com/help/custom-agents
+          - paragraph: Kick off agent work the moment something changes.
+        - article:
+          - heading "Agent Orchestration" [level=3]:
+            - link "Agent Orchestration":
+              - /url: https://www.notion.com/help/use-claude-agents-in-notion
+          - paragraph: Direct Claude, Cursor, and other agents from Notion.
+      - group:
+        - article:
+          - heading "API" [level=3]:
+            - link "API":
+              - /url: https://www.notion.com/help/guides/connect-tools-to-notion-api
+          - paragraph: Build custom integrations on top of Notion.
+        - article:
+          - heading "MCP" [level=3]:
+            - link "MCP":
+              - /url: https://www.notion.com/help/notion-mcp
+          - paragraph: Connect any AI tool to Notion's context.
+        - article:
+          - heading "Database automations" [level=3]:
+            - link "Database automations":
+              - /url: https://www.notion.com/help/database-automations
+          - paragraph: Automate repetitive database work, no code needed.
+    - region "Built for teams.":
+      - heading "Built for teams." [level=2]
+      - paragraph: Enterprise-grade security, admin controls, and agent governance.
+      - img "Isolated Teams 3-up"
+      - img "Teams section image"
+      - group:
+        - article:
+          - heading "SAML SSO" [level=3]:
+            - link "SAML SSO":
+              - /url: https://www.notion.com/help/saml-sso-configuration
+          - paragraph: Secure single sign-on through your identity provider.
+        - article:
+          - heading "SCIM API" [level=3]:
+            - link "SCIM API":
+              - /url: https://www.notion.com/help/provision-users-and-groups-with-scim
+          - paragraph: Automate user provisioning and deprovisioning.
+        - article:
+          - heading "Audit log" [level=3]:
+            - link "Audit log":
+              - /url: https://www.notion.com/help/audit-log
+          - paragraph: Track key security and admin events across your org.
+      - group:
+        - article:
+          - heading "Granular user permissions" [level=3]:
+            - link "Granular user permissions":
+              - /url: https://www.notion.com/help/sharing-and-permissions
+          - paragraph: Control exactly who can see and edit each page.
+        - article:
+          - heading "Granular agent permissions" [level=3]:
+            - link "Granular agent permissions":
+              - /url: https://www.notion.com/help/custom-agents-sharing-and-permissions
+          - paragraph: Scope exactly what every agent can see and do.
+        - article:
+          - heading "Agent governance" [level=3]:
+            - link "Agent governance":
+              - /url: https://www.notion.com/help/custom-agents-security-features
+          - paragraph: Monitor and control every agent in your workspace.
+      - group:
+        - article:
+          - heading "Global compliance standards" [level=3]:
+            - link "Global compliance standards":
+              - /url: https://www.notion.com/help/security-and-privacy
+          - paragraph: Meet GDPR, CCPA, and HIPAA requirements.
+        - article:
+          - heading "Third-party security certifications" [level=3]:
+            - link "Third-party security certifications":
+              - /url: https://www.notion.com/help/security-and-privacy
+          - paragraph: SOC 2 Type 2, ISO 27001, and BSI C5 certified.
+        - article:
+          - heading "Security and compliance partner integrations" [level=3]:
+            - link "Security and compliance partner integrations":
+              - /url: https://www.notion.com/help/add-security-and-compliance-integrations
+          - paragraph: Connect your SIEM, DLP, and compliance platforms.
+      - group:
+        - article:
+          - heading "Robust data protection" [level=3]:
+            - link "Robust data protection":
+              - /url: https://www.notion.com/help/security-and-privacy
+          - paragraph: AES-256 encryption at rest, TLS 1.2+ in transit.
+        - article:
+          - heading "No training on your data" [level=3]:
+            - link "No training on your data":
+              - /url: https://www.notion.com/help/notion-ai-security-practices
+          - paragraph: No training on your data by default; ZDR on Enterprise.
+        - article:
+          - heading "Data residency" [level=3]:
+            - link "Data residency":
+              - /url: https://www.notion.com/help/data-residency
+          - paragraph: Choose where your data is stored and kept.
+    - region "Get started today.":
+      - heading "Get started today." [level=2]
+      - link "Get Notion free":
+        - /url: /signup?from=marketing&pathname=%2Fproduct%2Ffeatures&tid=8c0b707079094fa99e4e09dd5c839d6c
+      - link "Request a demo":
+        - /url: /contact-sales
+  - contentinfo:
+    - link "Notion – Home":
+      - /url: /product
+      - img
+    - figure "Marshall McLuhan":
+      - blockquote: We shape our tools, and thereafter our tools shape us.
+      - text: Marshall McLuhan
+    - navigation "Footer":
+      - list "Product":
+        - text: Product
+        - listitem:
+          - link "Features":
+            - /url: /product/features
+        - listitem:
+          - link "What's New":
+            - /url: /releases
+        - listitem:
+          - link "Notion AI":
+            - /url: /product/ai
+        - listitem:
+          - link "Pricing":
+            - /url: /pricing
+        - listitem:
+          - link "Request a demo":
+            - /url: /contact-sales
+        - listitem:
+          - link "Download":
+            - /url: /download
+        - listitem:
+          - link "Explore more":
+            - /url: /explore
+      - list "Resources":
+        - text: Resources
+        - listitem:
+          - link "Customer stories":
+            - /url: /customers
+        - listitem:
+          - link "Connections":
+            - /url: /connections
+        - listitem:
+          - link "Marketplace":
+            - /url: /templates
+        - listitem:
+          - link "Help Center":
+            - /url: /help
+        - listitem:
+          - link "Academy":
+            - /url: https://academy.notion.com
+        - listitem:
+          - link "Community":
+            - /url: /community
+      - list "Company":
+        - text: Company
+        - listitem:
+          - link "About us":
+            - /url: /about
+        - listitem:
+          - link "Careers":
+            - /url: /careers
+        - listitem:
+          - link "Security":
+            - /url: /security
+        - listitem:
+          - link "Status":
+            - /url: https://www.notion-status.com
+        - listitem:
+          - link "Terms & privacy":
+            - /url: https://www.notion.so/28ffdd083dc3473e9c2da6ec011b58ac
+        - listitem:
+          - link "Your privacy rights":
+            - /url: https://www.notion.com/trust/privacy-policy#california
+      - list "Notion for":
+        - text: Notion for
+        - listitem:
+          - link "Enterprise":
+            - /url: /enterprise
+        - listitem:
+          - link "Small businesses":
+            - /url: /teams
+        - listitem:
+          - link "Startups":
+            - /url: /startups
+        - listitem:
+          - link "Developers":
+            - /url: https://developers.notion.com
+    - button "English (US)"
+    - button "Cookie settings"
+    - paragraph: © 2026 Notion Labs, Inc.
+  - alert

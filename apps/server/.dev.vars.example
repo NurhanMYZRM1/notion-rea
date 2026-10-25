@@ -1,0 +1,8 @@
+# Copy to .dev.vars for local development. Never commit real values.
+BETTER_AUTH_SECRET=dev-only-secret-change-me-0123456789abcdef
+CONSENT_SECRET=dev-only-consent-secret-0123456789abcdef
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+APPLE_CLIENT_ID=
+APPLE_CLIENT_SECRET=
+APPLE_APP_BUNDLE_IDENTIFIER=

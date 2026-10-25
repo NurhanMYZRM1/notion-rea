@@ -1,0 +1,12 @@
+node_modules
+dist
+.wrangler
+.dev.vars
+.env
+*.local
+.expo
+apps/mobile/ios
+apps/mobile/android
+test-results
+playwright-report
+coverage
