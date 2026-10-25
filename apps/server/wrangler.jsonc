@@ -4,12 +4,26 @@
   "main": "src/index.ts",
   "account_id": "636b468ba739e81c9a875f1c56f5d7bb",
   "compatibility_date": "2026-10-20",
-  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  "observability": { "enabled": true },
+  "compatibility_flags": [
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
+  "observability": {
+    "enabled": true
+  },
   "assets": {
     "directory": "../web/dist/client",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/sync/*", "/events/*", "/mcp", "/mcp/*", "/oauth/*", "/authorize", "/.well-known/*"]
+    "run_worker_first": [
+      "/api/*",
+      "/sync/*",
+      "/events/*",
+      "/mcp",
+      "/mcp/*",
+      "/oauth/*",
+      "/authorize",
+      "/.well-known/*"
+    ]
   },
   "vars": {
     "ENVIRONMENT": "development",
@@ -17,16 +31,162 @@
     "TEST_LOGIN": "enabled",
     "OAUTH_CIMD": "disabled"
   },
-  "d1_databases": [{ "binding": "DB", "database_name": "workspace-dev", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }],
-  "r2_buckets": [{ "binding": "FILES", "bucket_name": "workspace-dev-files" }],
-  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "workspace-dev",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "workspace-dev-files"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
   "durable_objects": {
     "bindings": [
-      { "name": "PAGE", "class_name": "PageDocument" },
-      { "name": "WORKSPACE", "class_name": "WorkspaceChannel" }
+      {
+        "name": "PAGE",
+        "class_name": "PageDocument"
+      },
+      {
+        "name": "WORKSPACE",
+        "class_name": "WorkspaceChannel"
+      }
     ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PageDocument", "WorkspaceChannel"] }],
-  "ratelimits": [{ "name": "API_LIMIT", "namespace_id": "1001", "simple": { "limit": 600, "period": 60 } }],
-  "triggers": { "crons": ["17 3 * * *"] }
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "PageDocument",
+        "WorkspaceChannel"
+      ]
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "API_LIMIT",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 600,
+        "period": 60
+      }
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "17 3 * * *"
+    ]
+  },
+  "env": {
+    "staging": {
+      "name": "workspace-staging",
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "PUBLIC_URL": "https://workspace-staging.paragonxplays.workers.dev",
+        "OAUTH_CIMD": "disabled"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "workspace-staging",
+          "database_id": "040195a7-d4b3-44c0-9b45-2f15da92128d",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "FILES",
+          "bucket_name": "workspace-staging-files"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "OAUTH_KV",
+          "id": "1744cd007af54f68a60524b27ac666eb"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "PAGE",
+            "class_name": "PageDocument"
+          },
+          {
+            "name": "WORKSPACE",
+            "class_name": "WorkspaceChannel"
+          }
+        ]
+      },
+      "ratelimits": [
+        {
+          "name": "API_LIMIT",
+          "namespace_id": "1002",
+          "simple": {
+            "limit": 600,
+            "period": 60
+          }
+        }
+      ]
+    },
+    "production": {
+      "name": "workspace",
+      "vars": {
+        "ENVIRONMENT": "production",
+        "PUBLIC_URL": "https://workspace.paragonxplays.workers.dev",
+        "OAUTH_CIMD": "disabled"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "workspace-production",
+          "database_id": "6e6f2055-a3db-4116-be97-77699d3827b8",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "FILES",
+          "bucket_name": "workspace-production-files"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "OAUTH_KV",
+          "id": "58dd05cf83b7480da231b8af77f7c7ab"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "PAGE",
+            "class_name": "PageDocument"
+          },
+          {
+            "name": "WORKSPACE",
+            "class_name": "WorkspaceChannel"
+          }
+        ]
+      },
+      "ratelimits": [
+        {
+          "name": "API_LIMIT",
+          "namespace_id": "1003",
+          "simple": {
+            "limit": 600,
+            "period": 60
+          }
+        }
+      ]
+    }
+  }
 }
