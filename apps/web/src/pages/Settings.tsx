@@ -313,11 +313,11 @@ function AgentsSection() {
         <strong>Connect an agent</strong>
         <p className="small">Claude Code:</p>
         <pre>
-          <code>{`claude mcp add --transport http --scope project workspace ${origin}/mcp\nclaude mcp login workspace`}</code>
+          <code>{`claude mcp add --transport http --scope project notion-workspace ${origin}/mcp\nclaude mcp login notion-workspace`}</code>
         </pre>
         <p className="small">Codex:</p>
         <pre>
-          <code>{`codex mcp add workspace --url ${origin}/mcp\ncodex mcp login workspace`}</code>
+          <code>{`codex mcp add notion-workspace --url ${origin}/mcp\ncodex mcp login notion-workspace`}</code>
         </pre>
         <p className="small muted">Signing in opens this site in your browser to choose a workspace and approve access.</p>
       </div>

@@ -19,8 +19,8 @@ token has not expired). Removing a member also revokes their agent connections.
 ## Claude Code (tested with 2.1.306)
 
 ```bash
-claude mcp add --transport http --scope project workspace https://HOST/mcp
-claude mcp login workspace        # or run /mcp inside Claude Code and choose Authenticate
+claude mcp add --transport http --scope project notion-workspace https://HOST/mcp
+claude mcp login notion-workspace        # or run /mcp inside Claude Code and choose Authenticate
 ```
 
 `--scope project` writes `.mcp.json` in the current project. `claude mcp login --no-browser` prints the
@@ -29,8 +29,8 @@ authorization URL for headless machines.
 ## Codex (tested with codex-cli 0.157.1)
 
 ```bash
-codex mcp add workspace --url https://HOST/mcp
-codex mcp login workspace
+codex mcp add notion-workspace --url https://HOST/mcp
+codex mcp login notion-workspace
 ```
 
 ## Tools
@@ -65,7 +65,20 @@ Findings: Codex prefers a Client ID Metadata Document (`https://chatgpt.com/oaut
 chatgpt.com answers workerd's fetch with HTTP 403, so CIMD is off by default (`OAUTH_CIMD`) and Codex falls
 back to dynamic registration. MCP SDK v2's per-tool `scopeChallenge` only fires on the 2026 protocol path, so
 the Worker checks `tools/call` scopes before dispatch and returns the standard 403 `insufficient_scope`
-challenge for every client. Deployed verification is pending (see LEDGER).
+challenge for every client.
+
+Production (2026-10-27, `https://workspace.paragonxplays.workers.dev`, owner signed in with Google):
+
+| Client | Login | Tools exercised | Result |
+|--------|-------|-----------------|--------|
+| Claude Code 2.1.306 (`claude mcp add --scope local notion-workspace` + `claude mcp login --no-browser`; ✔ Connected) | OAuth, consent approved for read/write | `workspace_info`, `create_page` (idempotencyKey), `read_page` | page "MCP check (Claude Code)" created, revision 1 |
+| Codex 0.157.1 (`codex mcp add notion-workspace` + `codex mcp login --no-browser`) | OAuth, consent approved for read/write; "Authentication complete" | not run: the ChatGPT account hit its Codex usage limit | login only |
+
+Finding: the first deployed attempt failed in Chrome. The consent page sent `form-action 'self'`, and Chrome
+applies `form-action` to the redirect after the POST, so the 302 to `http://localhost:<port>/callback` was
+blocked (the Worker logged the grant; the browser never reached the client). The consent page now also allows
+the requesting client's redirect origin (`test/mcp.test.ts` asserts it). Claude Code reserves the server name
+`workspace`, so the docs and Settings use `notion-workspace`.
 
 ## Compatibility
 

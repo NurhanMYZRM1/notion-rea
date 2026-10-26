@@ -28,8 +28,8 @@ test("settings: invitations, last-owner protection, agent help, theme, account d
   await expect(page.getByRole("alert")).toContainText("A workspace needs at least one owner");
 
   // Agent connection help uses this origin.
-  await expect(page.locator(".help-box")).toContainText("claude mcp add --transport http --scope project workspace http://localhost:5173/mcp");
-  await expect(page.locator(".help-box")).toContainText("codex mcp login workspace");
+  await expect(page.locator(".help-box")).toContainText("claude mcp add --transport http --scope project notion-workspace http://localhost:5173/mcp");
+  await expect(page.locator(".help-box")).toContainText("codex mcp login notion-workspace");
   await expect(page.getByText("No agents connected.")).toBeVisible();
 
   // Theme.
