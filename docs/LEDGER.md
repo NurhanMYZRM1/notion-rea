@@ -8,8 +8,8 @@ Resume here. Plan: [plans/workspace-blueprint.md](../plans/workspace-blueprint.m
 - Cloudflare account: **`Paragonxplays@gmail.com's Account` (`636b468ba739e81c9a875f1c56f5d7bb`)**, switched 2026-10-26 at the user's request (the Syedakmalhadif account only granted a single-Worker policy). Hostnames: `workspace-staging.paragonxplays.workers.dev`, `workspace.paragonxplays.workers.dev`. D1 staging `040195a7-d4b3-44c0-9b45-2f15da92128d`, production `6e6f2055-a3db-4116-be97-77699d3827b8`; KV `workspace-<env>-oauth`.
 - Initial owner: `paragonxplays@gmail.com` (bootstrap command, not auto-membership).
 - Google OAuth client: web client "Workspace web" in Google Cloud project `workspace-512815` (Testing, External),
-  redirect URIs for both hosts. Production has `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`; staging has only the ID
-  (Google sign-in off there until the secret is added). The test-user list would not save from the console; the
+  redirect URIs for both hosts. Both environments have `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`
+  (`/api/providers` reports `google:true` on both, 2026-10-27). The test-user list would not save from the console; the
   owner account signs in regardless.
 - Toolchain verified 2026-10-25: Node 26.10, pnpm 12.15, Xcode 27.1 + iPhone 17 Pro simulator (iOS 26.5),
   EAS CLI logged in, Claude Code 2.1.306, Codex CLI 0.157.1. **No Java/Android SDK/adb, no Maestro** locally.
@@ -63,7 +63,6 @@ Resume here. Plan: [plans/workspace-blueprint.md](../plans/workspace-blueprint.m
 - 2026-10-27: production owner workspace `ws_Fdod8OKrPR96JwevHSI6NQ` bootstrapped; paragonxplays@gmail.com
   accepted the owner invite via Google sign-in. Claude Code verified against production `/mcp`; Codex logged in
   but its tool run is blocked by the ChatGPT usage limit — rerun `codex exec` against `notion-workspace`.
-- Staging still needs `GOOGLE_CLIENT_SECRET` for Google sign-in.
 - Mobile store builds: `eas build` not run; App Store Connect / Play Console ids are placeholders in `apps/mobile/eas.json`.
 - An `apps/desktop` Tauri app and matching root script/README/.gitignore edits appeared on 2026-10-26 08:04 from
   outside this session; left uncommitted for their owner (its dependency is in the committed lockfile).
