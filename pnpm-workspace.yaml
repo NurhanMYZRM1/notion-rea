@@ -22,3 +22,10 @@ overrides:
   react-dom: 19.3.0
 patchedDependencies:
   react-native-webview@14.0.1: patches/react-native-webview@14.0.1.patch
+auditConfig:
+  # shortcut: both advisories reach us only via @expo/cli (local build tooling; never in the Worker bundle or the
+  # app binary) and have no fix on the line Expo uses: node-forge has no patched release, and zod's fix is 4.6.6
+  # while @expo/cli pins zod 3. Remove when an Expo release ships patched versions.
+  ignoreGhsas:
+    - GHSA-86w9-cpqp-85rv
+    - GHSA-mrhx-c7xc-m3w5
