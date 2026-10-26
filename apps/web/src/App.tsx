@@ -5,6 +5,7 @@ import { authClient, isUnauthenticated } from "./api";
 import { lastUserId, persistQueries, restoreQueries, setLastUserId, wipeAccount } from "./persist";
 import { useMe } from "./queries";
 import { navigate, useLocation } from "./router";
+import { UnsyncedDrafts } from "./drafts";
 import { Shell } from "./shell/Shell";
 import { setDocAccount } from "./sync/cache-db";
 import { Splash, Toaster } from "./ui";
@@ -31,9 +32,10 @@ export function useAccountBinding(me: Me | undefined) {
   useEffect(() => {
     const id = me?.user.id;
     if (!id || bound.current === id) return;
+    // A different account was bound in this tab: drop its data. Reset (not remove) so mounted views refetch.
+    if (bound.current) void qc.resetQueries({ predicate: (q) => q.queryKey[0] !== "workspaces" });
     bound.current = id;
     setLastUserId(id);
-    qc.removeQueries({ predicate: (q) => q.queryKey[0] !== "workspaces" });
     setDocAccount(id);
     persistQueries(qc, id);
     void restoreQueries(qc, id);
@@ -43,6 +45,8 @@ export function useAccountBinding(me: Me | undefined) {
 function Authed() {
   const me = useMe();
   const loc = useLocation();
+  // Removed from the last workspace while a page is open: keep the page (and its draft export) on screen.
+  const hadWorkspaces = useRef(false);
   useAccountBinding(me.data);
   const unauth = me.isError && isUnauthenticated(me.error);
   useEffect(() => {
@@ -51,7 +55,8 @@ function Authed() {
 
   if (unauth) return <Splash />;
   if (me.data) {
-    if (!me.data.workspaces.length) return <NoWorkspace me={me.data} />;
+    if (me.data.workspaces.length) hadWorkspaces.current = true;
+    else if (!(hadWorkspaces.current && loc.pathname.startsWith("/p/"))) return <NoWorkspace me={me.data} />;
     return <Shell me={me.data} />;
   }
   if (me.isError || (me.isPending && me.fetchStatus === "paused")) {
@@ -69,7 +74,8 @@ function Authed() {
 }
 
 export async function signOutEverywhere(userId: string) {
-  await authClient.signOut();
+  // Offline sign-out still wipes this device; the server session then just expires.
+  await authClient.signOut().catch(() => {});
   await wipeAccount(userId);
   location.assign("/login");
 }
@@ -82,6 +88,7 @@ function NoWorkspace({ me }: { me: Me }) {
         You're signed in as <strong>{me.user.email}</strong>, but you aren't a member of any workspace.
       </p>
       <p className="muted">Workspaces are invitation-only. Ask a workspace owner to send you an invitation link, then open it while signed in with this account.</p>
+      <UnsyncedDrafts />
       <button type="button" className="btn" onClick={() => void signOutEverywhere(me.user.id)}>
         Sign out
       </button>

@@ -1,0 +1,23 @@
+# Create a page, give it a title, type into the editor (fixed toolbar), and wait for "Synced".
+appId: com.workspace.app
+env:
+  TITLE: Maestro page
+  BODY: Typed by Maestro — 日本語 שלום 👋
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Search"
+    timeout: 20000
+- tapOn: "New page or database"
+- tapOn: "Page"
+- tapOn:
+    id: "page-title"
+- inputText: ${TITLE}
+- tapOn: "Tap to write, type / for blocks"
+- inputText: ${BODY}
+- assertVisible: "Bold" # the editor's fixed toolbar is above the keyboard
+- tapOn: "Hide keyboard"
+- extendedWaitUntil:
+    visible: "Sync status: Synced"
+    timeout: 20000
+- assertVisible: ${BODY}

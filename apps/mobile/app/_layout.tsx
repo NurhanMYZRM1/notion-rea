@@ -5,8 +5,9 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { AppState, useColorScheme } from "react-native";
-import { ActionSheetHost } from "@/components/ui";
+import { ActionSheetHost, PromptHost } from "@/components/ui";
 import { useWorkspaceEvents } from "@/lib/events";
+import { perfMark } from "@/lib/perf";
 import { pendingInvite, SessionProvider, useSession, useWorkspace } from "@/lib/session";
 
 void SplashScreen.preventAutoHideAsync();
@@ -33,7 +34,9 @@ function Navigation() {
   const { status } = useSession();
   const scheme = useColorScheme();
   useEffect(() => {
-    if (status !== "loading") void SplashScreen.hideAsync();
+    if (status === "loading") return;
+    void SplashScreen.hideAsync();
+    perfMark(`shell-ready ${status} at=${Date.now()}`);
   }, [status]);
   if (status === "loading") return null;
   return (
@@ -56,6 +59,7 @@ function Navigation() {
       </Stack>
       {status === "ready" && <SignedInEffects />}
       <ActionSheetHost />
+      <PromptHost />
     </ThemeProvider>
   );
 }
@@ -66,8 +70,12 @@ function SignedInEffects() {
   const { current } = useWorkspace();
   useWorkspaceEvents(current?.id ?? null);
   useEffect(() => {
+    let reachable = true;
+    // Refetch once per offline → online transition (the listener fires on every network change).
     const sub = addNetworkStateListener((s) => {
-      if (s.isInternetReachable) void qc.invalidateQueries();
+      const next = !!s.isConnected && s.isInternetReachable !== false;
+      if (next && !reachable) void qc.invalidateQueries();
+      reachable = next;
     });
     void pendingInvite.get().then((token) => token && router.push({ pathname: "/invite/[token]", params: { token } }));
     return () => sub.remove();

@@ -1,0 +1,32 @@
+# Offline edit survives a force quit. Maestro cannot stop the backend on iOS, so the harness must:
+#   1. run open-page-and-type.yaml (page cached on device), 2. STOP the API server, 3. run this flow,
+#   4. restart the server and run the last block again (or check GET /api/pages/<id>/document).
+appId: com.workspace.app
+env:
+  TITLE: Maestro page
+  OFFLINE_TEXT: Written offline
+---
+- launchApp
+- extendedWaitUntil:
+    visible: ${TITLE}
+    timeout: 20000
+- tapOn: ${TITLE}
+- extendedWaitUntil:
+    visible: "Sync status: Offline|Sync status: Saved on device"
+    timeout: 20000
+- tapOn: "Typed by Maestro.*"
+- pressKey: End
+- inputText: " ${OFFLINE_TEXT}"
+- extendedWaitUntil:
+    visible: "Sync status: Saved on device"
+    timeout: 10000
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: ${TITLE}
+    timeout: 20000
+- tapOn: ${TITLE}
+- extendedWaitUntil:
+    visible: ".*${OFFLINE_TEXT}.*"
+    timeout: 20000
+- assertVisible: "Sync status: Saved on device"

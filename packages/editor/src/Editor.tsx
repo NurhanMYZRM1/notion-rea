@@ -98,7 +98,8 @@ export const WorkspaceEditor = memo(function WorkspaceEditor(props: WorkspaceEdi
       extensions: [
         ...schemaExtensions().map((e) => (e.name === "image" ? imageWithView(props) : e.name === "fileAttachment" ? fileWithView(props) : e)),
         Collaboration.configure({ document: props.doc, field: FRAGMENT }),
-        CollaborationCaret.configure({ provider: { awareness: props.awareness }, user: props.user }),
+        // UniqueID waits for provider "synced"; callers load the local doc before mounting, so it is already synced.
+        CollaborationCaret.configure({ provider: { awareness: props.awareness, on: (event: string, cb: () => void) => event === "synced" && cb(), off: () => {} }, user: props.user }),
         Placeholder.configure({ placeholder: props.placeholder ?? "Type / for blocks", showOnlyCurrent: true }),
         BlockActions,
         SlashCommand(() => slashItems(canUpload ? { pickImage: () => pick("image"), pickFile: () => pick("file") } : {})),

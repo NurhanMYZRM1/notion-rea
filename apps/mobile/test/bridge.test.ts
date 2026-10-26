@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Y from "yjs";
-import { BRIDGE_VERSION, decodeMsg, encodeMsg, fromBase64, safeExternalUrl, toBase64 } from "../lib/bridge.ts";
+import { attachmentId, BRIDGE_VERSION, decodeMsg, encodeMsg, fromBase64, navigationAllowed, safeExternalUrl, toBase64 } from "../lib/bridge.ts";
 
 test("base64 round-trips every byte value and large buffers", () => {
   const all = Uint8Array.from({ length: 256 }, (_, i) => i);
@@ -39,4 +39,36 @@ test("only http(s) and mailto links may leave the editor", () => {
   assert.equal(safeExternalUrl("workspace://invite/x"), null);
   assert.equal(safeExternalUrl("not a url"), null);
   assert.equal(safeExternalUrl(42), null);
+});
+
+test("a keystroke crosses the bridge as a small incremental update, not the document", () => {
+  const web = new Y.Doc();
+  const native = new Y.Doc();
+  const sent: string[] = [];
+  web.on("update", (u: Uint8Array) => sent.push(encodeMsg(u).b64));
+  web.getText("t").insert(0, "x".repeat(200_000));
+  Y.applyUpdate(native, decodeMsg({ v: 1, b64: sent.pop()! }));
+  web.getText("t").insert(100, "é");
+  const keystroke = sent.pop()!;
+  assert.ok(keystroke.length < 100, `keystroke payload was ${keystroke.length} chars`);
+  Y.applyUpdate(native, decodeMsg({ v: 1, b64: keystroke }));
+  assert.equal(native.getText("t").toString(), web.getText("t").toString());
+});
+
+test("only our attachment paths are fetched with the session cookie", () => {
+  assert.equal(attachmentId("/api/attachments/att_0123456789abcdef"), "att_0123456789abcdef");
+  assert.equal(attachmentId("https://evil.example/api/attachments/att_0123456789abcdef"), null);
+  assert.equal(attachmentId("/api/attachments/att_0123456789abcdef/../../me"), null);
+  assert.equal(attachmentId("/api/me"), null);
+  assert.equal(attachmentId(null), null);
+});
+
+test("the WebView may only (re)load its own document", () => {
+  const doc = "file:///app/www.bundle/editor-dom.html";
+  assert.equal(navigationAllowed(null, doc), true, "initial load");
+  assert.equal(navigationAllowed(doc, `${doc}#x`), true, "same document");
+  assert.equal(navigationAllowed(doc, "about:blank"), true);
+  assert.equal(navigationAllowed(doc, "https://example.com/"), false);
+  assert.equal(navigationAllowed(doc, "file:///etc/hosts"), false);
+  assert.equal(navigationAllowed(doc, "javascript:alert(1)"), false);
 });

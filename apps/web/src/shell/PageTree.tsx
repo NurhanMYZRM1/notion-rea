@@ -1,6 +1,6 @@
 import type { PageSummary } from "@workspace/core";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { type DragEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type DragEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { api, conflictCurrent, errorMessage } from "../api";
 import { qk } from "../queries";
 import { navigate } from "../router";
@@ -47,6 +47,8 @@ export function PageTree(props: TreeProps) {
   const [pickerExpanded] = useState(() => createStore<ReadonlySet<string>>(new Set()));
   const expanded = props.mode === "nav" ? navExpanded : pickerExpanded;
   const focusId = useRef<string | null>(null);
+  const hintId = useId();
+  const reorderable = props.mode === "nav" && props.canWrite;
 
   // Roving tabindex: exactly one treeitem is tabbable (last focused, else the active page, else the first).
   useEffect(() => {
@@ -113,19 +115,27 @@ export function PageTree(props: TreeProps) {
   };
 
   return (
-    <ul
-      ref={ref}
-      role="tree"
-      aria-label={props.label}
-      className="tree"
-      onKeyDown={onKeyDown}
-      onFocus={(e) => {
-        const id = (e.target as HTMLElement).dataset.id;
-        if (id) focusId.current = id;
-      }}
-    >
-      <TreeLevel {...props} parentId={null} level={1} expanded={expanded} setExpanded={setExpanded} />
-    </ul>
+    <>
+      <ul
+        ref={ref}
+        role="tree"
+        aria-label={props.label}
+        aria-describedby={reorderable ? hintId : undefined}
+        className="tree"
+        onKeyDown={onKeyDown}
+        onFocus={(e) => {
+          const id = (e.target as HTMLElement).dataset.id;
+          if (id) focusId.current = id;
+        }}
+      >
+        <TreeLevel {...props} parentId={null} level={1} expanded={expanded} setExpanded={setExpanded} />
+      </ul>
+      {reorderable && (
+        <p id={hintId} className="sr-only">
+          Alt plus Up or Down arrow moves the focused page among its siblings. Use Move to in the page menu to change its parent.
+        </p>
+      )}
+    </>
   );
 }
 
@@ -165,7 +175,7 @@ function TreeLevel(props: LevelProps) {
   return (
     <>
       {pages.map((p, i) => (
-        <TreeItem key={p.id} {...props} page={p} posinset={i + 1} setsize={total} prev={pages[i - 1] ?? null} first={pages[0] ?? null} />
+        <TreeItem key={p.id} {...props} page={p} posinset={i + 1} setsize={total} prev={pages[i - 1] ?? null} siblings={pages} />
       ))}
       {q.hasNextPage && (
         <li role="treeitem" aria-level={props.level} aria-posinset={total} aria-setsize={total} className="tree-more" data-id={`more:${props.parentId ?? "root"}`}>
@@ -181,7 +191,7 @@ function TreeLevel(props: LevelProps) {
 // Module-level: HTML5 drag data isn't readable during dragover.
 let dragging: PageSummary | null = null;
 
-function TreeItem(props: LevelProps & { page: PageSummary; posinset: number; setsize: number; prev: PageSummary | null; first: PageSummary | null }) {
+function TreeItem(props: LevelProps & { page: PageSummary; posinset: number; setsize: number; prev: PageSummary | null; siblings: PageSummary[] }) {
   const { page, level } = props;
   const qc = useQueryClient();
   const expandedSet = useStore(props.expanded);
@@ -214,6 +224,21 @@ function TreeItem(props: LevelProps & { page: PageSummary; posinset: number; set
       for (const p of new Set([src.parentId, parentId])) void qc.invalidateQueries({ queryKey: qk.children(props.ws, p) });
       void qc.invalidateQueries({ queryKey: qk.page(src.id) });
     }
+  };
+
+  /** Keyboard alternative to drag reordering: Alt+ArrowUp/Down swaps with the neighbouring sibling. */
+  const reorder = async (dir: -1 | 1) => {
+    const sibs = props.siblings;
+    const i = sibs.findIndex((p) => p.id === page.id);
+    const target = sibs[i + dir];
+    if (i < 0 || !target || !navigator.onLine) return;
+    // The API inserts *after* a sibling: moving up past the first page = move that page after us.
+    if (dir === 1) await move(page, page.parentId, target.id);
+    else if (i === 1) await move(target, page.parentId, page.id);
+    else await move(page, page.parentId, sibs[i - 2]!.id);
+    await qc.refetchQueries({ queryKey: qk.children(props.ws, page.parentId) });
+    document.querySelector<HTMLElement>(`[role="tree"] [data-id="${page.id}"]`)?.focus();
+    toast(`Moved “${title}” ${dir < 0 ? "up" : "down"}`);
   };
 
   const onDrop = async (e: DragEvent<HTMLElement>) => {
@@ -250,6 +275,12 @@ function TreeItem(props: LevelProps & { page: PageSummary; posinset: number; set
       aria-disabled={!nav && page.id === props.excludeId ? true : undefined}
       data-id={page.id}
       className="tree-item"
+      onKeyDown={(e) => {
+        if (!draggable || !e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown") || e.target !== e.currentTarget) return;
+        e.preventDefault();
+        e.stopPropagation();
+        void reorder(e.key === "ArrowUp" ? -1 : 1);
+      }}
     >
       <div
         className={`tree-row ${selected ? "is-active" : ""} ${drop ? `drop-${drop}` : ""}`}

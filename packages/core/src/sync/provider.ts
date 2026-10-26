@@ -63,6 +63,8 @@ export class SyncProvider {
   private batch: Uint8Array[] = [];
   private batchTimer: ReturnType<typeof setTimeout> | null = null;
   private retry = 0;
+  /** Until the first connection attempt finishes we are "loading", not "offline". */
+  private attempted = false;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
   private state: SyncState = {
@@ -126,7 +128,7 @@ export class SyncProvider {
     s.pendingLocal = this.localCounter > this.syncedCounter;
     if (s.failure) s.phase = "failed";
     else if (this.pendingAppends > 0) s.phase = "saving-local";
-    else if (!s.connected) s.phase = s.pendingLocal ? "saved-device" : this.state.phase === "loading" && !this.store ? "loading" : "offline";
+    else if (!s.connected) s.phase = s.pendingLocal ? "saved-device" : this.attempted ? "offline" : "loading";
     else s.phase = s.pendingLocal || this.inflight.length || this.batch.length ? "syncing" : "synced";
     this.state = s;
     this.opts.onState?.(s);
@@ -195,6 +197,8 @@ export class SyncProvider {
     try {
       ws = await this.opts.connect();
     } catch {
+      this.attempted = true;
+      this.emit({});
       this.scheduleRetry();
       return;
     }
@@ -261,6 +265,7 @@ export class SyncProvider {
   private onClose(ws: WebSocket, code: number) {
     if (this.ws !== ws) return;
     this.ws = null;
+    this.attempted = true;
     this.handshakeDone = false;
     this.inflight = [];
     const others = Array.from(this.awareness.getStates().keys()).filter((id) => id !== this.doc.clientID);

@@ -1,0 +1,46 @@
+# Sign in with the local/CI-only test login (server must run with TEST_LOGIN=enabled), accept the
+# owner invitation printed by `apps/server/scripts/bootstrap.mjs`, and land on the workspace home.
+#   maestro test -e INVITE_TOKEN=<token> maestro/sign-in.yaml
+appId: com.workspace.app
+env:
+  TEST_EMAIL: mobile.owner@example.com
+  TEST_PASSWORD: test-password-1234 # local test fixture only; test login is disabled in production
+  INVITE_TOKEN: ""
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- extendedWaitUntil:
+    visible: "Test sign-in (development only)"
+    timeout: 20000
+- tapOn:
+    id: "test-email"
+- inputText: ${TEST_EMAIL}
+- tapOn:
+    id: "test-password"
+- inputText: ${TEST_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: "test-sign-in"
+# First run on a fresh server: the account does not exist yet, so create it instead.
+- runFlow:
+    when:
+      visible: "Couldn't sign in"
+    commands:
+      - tapOn: "OK"
+      - tapOn: "Create test account"
+- extendedWaitUntil:
+    visible:
+      text: "You need an invitation|Search"
+    timeout: 20000
+- runFlow:
+    when:
+      true: ${INVITE_TOKEN != ""}
+    commands:
+      - openLink: "workspace://invite/${INVITE_TOKEN}"
+      - tapOn:
+          id: "accept-invite"
+- extendedWaitUntil:
+    visible: "Search"
+    timeout: 20000
+- assertVisible: "Pages"

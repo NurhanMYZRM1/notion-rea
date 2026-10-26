@@ -1,4 +1,4 @@
-import { type ButtonHTMLAttributes, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { type ButtonHTMLAttributes, type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 
 // ---------- tiny external store (keeps fast-changing state out of big React trees) ----------
 
@@ -83,6 +83,8 @@ export function Dialog(props: { title: string; onClose: () => void; children: Re
     const returnTo = document.activeElement as HTMLElement | null;
     const d = ref.current!;
     if (!d.open) d.showModal();
+    // React's autoFocus fires before showModal(), which then moves focus to the first button; honour the request here.
+    d.querySelector<HTMLElement>("[data-autofocus]")?.focus();
     return () => {
       if (returnTo?.isConnected) returnTo.focus();
     };
@@ -160,10 +162,33 @@ export function Menu(props: {
   const menuId = useId();
   const items = props.items.filter((i): i is MenuItem => !!i);
 
+  const [pos, setPos] = useState<CSSProperties>({});
+
   const close = (refocus = true) => {
     setOpen(false);
     if (refocus) btn.current?.focus();
   };
+  // Fixed positioning (kept next to the button on scroll/resize) so menus inside scrolling tables,
+  // boards and the sidebar are never clipped.
+  const alignLeft = props.align === "left";
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      if (!btn.current || !menu.current) return;
+      const r = btn.current.getBoundingClientRect();
+      const m = menu.current.getBoundingClientRect();
+      const below = r.bottom + 4 + m.height <= innerHeight || r.top < m.height + 8;
+      const left = alignLeft ? Math.min(r.left, innerWidth - m.width - 8) : r.right - m.width;
+      setPos({ top: Math.max(8, below ? r.bottom + 4 : r.top - 4 - m.height), left: Math.max(8, left) });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, alignLeft]);
   useEffect(() => {
     if (!open) return;
     menu.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
@@ -210,7 +235,7 @@ export function Menu(props: {
         {props.children}
       </button>
       {open && (
-        <div ref={menu} id={menuId} role="menu" aria-label={props.label} className={`menu menu-${props.align ?? "right"}`} onKeyDown={onKey}>
+        <div ref={menu} id={menuId} role="menu" aria-label={props.label} className="menu" style={pos} onKeyDown={onKey}>
           {items.map((item) => (
             <button
               key={item.label}

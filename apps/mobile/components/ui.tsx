@@ -1,6 +1,20 @@
 import type { SyncPhase } from "@workspace/core/sync";
-import { type ReactNode, useSyncExternalStore } from "react";
-import { ActionSheetIOS, ActivityIndicator, Modal, Platform, Pressable, ScrollView, Text, View, type ViewStyle } from "react-native";
+import { type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
+import {
+  ActionSheetIOS,
+  ActivityIndicator,
+  Alert,
+  type KeyboardTypeOptions,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+  type ViewStyle,
+} from "react-native";
 import { colors, HIT } from "@/lib/theme";
 
 export function Row(p: {
@@ -202,6 +216,7 @@ interface SheetState {
   title?: string;
   message?: string;
   actions: SheetAction[];
+  onCancel?: () => void;
 }
 let sheet: SheetState | null = null;
 const sheetListeners = new Set<() => void>();
@@ -221,9 +236,21 @@ export function showActions(s: SheetState) {
         cancelButtonIndex: labels.length - 1,
         destructiveButtonIndex: s.actions.flatMap((a, i) => (a.destructive ? [i] : [])),
       },
-      (i) => s.actions[i]?.onPress(),
+      (i) => (s.actions[i] ? s.actions[i].onPress() : s.onCancel?.()),
     );
   } else setSheet(s);
+}
+
+/** Promise form of showActions: resolves to the chosen value, or undefined when cancelled. */
+export function choose<T>(title: string, options: { label: string; value: T; destructive?: boolean }[], message?: string): Promise<T | undefined> {
+  return new Promise((resolve) =>
+    showActions({
+      title,
+      message,
+      actions: options.map((o) => ({ label: o.label, destructive: o.destructive, onPress: () => resolve(o.value) })),
+      onCancel: () => resolve(undefined),
+    }),
+  );
 }
 
 /** Mounted once at the root; renders Android action sheets. */
@@ -237,8 +264,19 @@ export function ActionSheetHost() {
   );
   if (Platform.OS === "ios") return null;
   return (
-    <Modal visible={!!s} transparent animationType="slide" onRequestClose={() => setSheet(null)}>
-      <Pressable accessibilityLabel="Close" style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.3)" }} onPress={() => setSheet(null)} />
+    <Modal
+      visible={!!s}
+      transparent
+      animationType="slide"
+      onRequestClose={() => {
+        s?.onCancel?.();
+        setSheet(null);
+      }}
+    >
+      <Pressable accessibilityLabel="Close" style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.3)" }} onPress={() => {
+        s?.onCancel?.();
+        setSheet(null);
+      }} />
       <View style={{ backgroundColor: colors.card, paddingBottom: 24, maxHeight: "70%" }}>
         {!!s?.title && <SectionTitle>{s.title}</SectionTitle>}
         <ScrollView>
@@ -253,9 +291,106 @@ export function ActionSheetHost() {
               }}
             />
           ))}
-          <Row title="Cancel" onPress={() => setSheet(null)} />
+          <Row
+            title="Cancel"
+            onPress={() => {
+              s?.onCancel?.();
+              setSheet(null);
+            }}
+          />
         </ScrollView>
       </View>
     </Modal>
+  );
+}
+
+// ---------- text prompt (Alert.prompt on iOS, modal on Android) ----------
+
+export interface PromptOptions {
+  title: string;
+  message?: string;
+  value?: string;
+  placeholder?: string;
+  confirm?: string;
+  keyboardType?: KeyboardTypeOptions;
+}
+let promptState: (PromptOptions & { resolve: (v: string | null) => void }) | null = null;
+const promptListeners = new Set<() => void>();
+const setPrompt = (p: typeof promptState) => {
+  promptState = p;
+  promptListeners.forEach((l) => l());
+};
+
+/** Resolves to the entered text, or null when cancelled. */
+export function prompt(o: PromptOptions): Promise<string | null> {
+  return new Promise((resolve) => {
+    if (Platform.OS === "ios") {
+      Alert.prompt(
+        o.title,
+        o.message,
+        [
+          { text: "Cancel", style: "cancel", onPress: () => resolve(null) },
+          { text: o.confirm ?? "Save", isPreferred: true, onPress: (v?: string) => resolve(v ?? "") },
+        ],
+        "plain-text",
+        o.value ?? "",
+        o.keyboardType,
+      );
+    } else setPrompt({ ...o, resolve });
+  });
+}
+
+/** Mounted once at the root; renders Android prompts. */
+export function PromptHost() {
+  const p = useSyncExternalStore(
+    (l) => {
+      promptListeners.add(l);
+      return () => promptListeners.delete(l);
+    },
+    () => promptState,
+  );
+  const [text, setText] = useState("");
+  useEffect(() => setText(p?.value ?? ""), [p]);
+  if (Platform.OS === "ios") return null;
+  const done = (v: string | null) => {
+    p?.resolve(v);
+    setPrompt(null);
+  };
+  return (
+    <Modal visible={!!p} transparent animationType="fade" onRequestClose={() => done(null)}>
+      <KeyboardAvoidingView behavior="height" style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: "rgba(0,0,0,0.35)" }}>
+        <View style={{ backgroundColor: colors.card, borderRadius: 16, padding: 20, gap: 12 }}>
+          <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: "600", color: colors.label }}>
+            {p?.title}
+          </Text>
+          {!!p?.message && <Text style={{ fontSize: 15, color: colors.secondaryLabel }}>{p.message}</Text>}
+          <TextInput
+            autoFocus
+            accessibilityLabel={p?.title}
+            value={text}
+            onChangeText={setText}
+            placeholder={p?.placeholder}
+            placeholderTextColor={colors.tertiaryLabel}
+            keyboardType={p?.keyboardType}
+            onSubmitEditing={() => done(text)}
+            style={{ minHeight: HIT, fontSize: 17, color: colors.label, borderBottomWidth: 1, borderBottomColor: colors.separator }}
+          />
+          <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
+            <Button kind="plain" title="Cancel" onPress={() => done(null)} />
+            <Button kind="plain" title={p?.confirm ?? "Save"} onPress={() => done(text)} />
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+/** Native confirmation dialog; resolves true when the (destructive) action is chosen. */
+export function confirm(title: string, message: string, action: string, destructive = true): Promise<boolean> {
+  return new Promise((resolve) =>
+    Alert.alert(title, message, [
+      { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+      { text: action, style: destructive ? "destructive" : "default", onPress: () => resolve(true) },
+    ], { cancelable: true, onDismiss: () => resolve(false) }),
   );
 }

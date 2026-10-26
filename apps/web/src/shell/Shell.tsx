@@ -17,7 +17,14 @@ const TrashPage = lazy(() => import("../pages/Trash"));
 // ---------- sidebar state ----------
 
 const COLLAPSED_KEY = "ws-sidebar-collapsed";
-const sidebar = createStore({ collapsed: localStorage.getItem(COLLAPSED_KEY) === "1", drawerOpen: false });
+const readCollapsed = () => {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+const sidebar = createStore({ collapsed: readCollapsed(), drawerOpen: false });
 const mq = window.matchMedia("(max-width: 767px)");
 const useNarrow = () =>
   useSyncExternalStore(
@@ -32,11 +39,17 @@ function toggleSidebar(narrow: boolean) {
   const s = sidebar.get();
   if (narrow) sidebar.set({ ...s, drawerOpen: !s.drawerOpen });
   else {
-    localStorage.setItem(COLLAPSED_KEY, s.collapsed ? "0" : "1");
+    try {
+      localStorage.setItem(COLLAPSED_KEY, s.collapsed ? "0" : "1");
+    } catch {
+      /* private mode: not remembered */
+    }
     sidebar.set({ ...s, collapsed: !s.collapsed });
   }
 }
-const closeDrawer = () => sidebar.get().drawerOpen && sidebar.set({ ...sidebar.get(), drawerOpen: false });
+const closeDrawer = () => {
+  if (sidebar.get().drawerOpen) sidebar.set({ ...sidebar.get(), drawerOpen: false });
+};
 
 /** Every view renders its own top bar; the sidebar toggle lives here. */
 export function TopBar({ children }: { children?: ReactNode }) {
@@ -101,8 +114,8 @@ export function Shell({ me }: { me: Me }) {
   const pageId = match(/^\/p\/([^/]+)\/?$/, pathname)?.[0] ?? null;
   const pageQ = usePageMaybe(pageId);
   const last = lastWorkspace();
-  const fallbackWs = me.workspaces.some((w) => w.id === last) ? last! : me.workspaces[0]!.id;
-  const ws = wsRoute?.[0] ?? pageQ?.workspaceId ?? fallbackWs;
+  const fallbackWs = me.workspaces.some((w) => w.id === last) ? last! : (me.workspaces[0]?.id ?? null);
+  const ws = wsRoute?.[0] ?? pageQ?.workspaceId ?? fallbackWs ?? "";
   const member = me.workspaces.find((w) => w.id === ws);
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -111,7 +124,7 @@ export function Shell({ me }: { me: Me }) {
     if (member) rememberWorkspace(ws);
   }, [member, ws]);
   useEffect(() => {
-    if (pathname === "/" || pathname === "") navigate(`/w/${fallbackWs}`, { replace: true });
+    if ((pathname === "/" || pathname === "") && fallbackWs) navigate(`/w/${fallbackWs}`, { replace: true });
   }, [pathname, fallbackWs]);
   useEffect(closeDrawer, [pathname]);
   useEffect(() => {

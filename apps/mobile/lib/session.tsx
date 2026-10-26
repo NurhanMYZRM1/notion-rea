@@ -3,7 +3,7 @@ import { type QueryKey, useQuery, useQueryClient, type UseQueryOptions } from "@
 import { Directory, Paths } from "expo-file-system";
 import * as SecureStore from "expo-secure-store";
 import * as SQLite from "expo-sqlite";
-import { createContext, type ReactNode, use, useCallback, useEffect, useMemo, useState } from "react";
+import { createContext, type ReactNode, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, authClient, COOKIE_KEYS, isNetworkError } from "./api";
 import { kvGet, kvSet, migrate, type Sql } from "./doc-store";
 
@@ -40,10 +40,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null);
   const [wsPref, setWsPref] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const accountRef = useRef<Account | null>(null);
+  accountRef.current = account;
 
   const open = useCallback(async (user: User) => {
     const dbName = dbNameFor(user.id);
-    const sql = await SQLite.openDatabaseAsync(dbName);
+    // Re-sign-in after an expired session reuses the open handle; a different account closes the old one.
+    const prev = accountRef.current;
+    if (prev && prev.dbName !== dbName) await prev.sql.closeAsync().catch(() => {});
+    const sql = prev?.dbName === dbName ? prev.sql : await SQLite.openDatabaseAsync(dbName);
     await migrate(sql as unknown as Sql);
     await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
     setWsPref((await kvGet<string>(sql as unknown as Sql, "pref:ws")) ?? null);

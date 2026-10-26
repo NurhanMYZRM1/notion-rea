@@ -9,6 +9,11 @@ export default defineConfig({
   build: {
     target: "es2022",
     sourcemap: true,
-    rollupOptions: { output: { manualChunks: undefined } },
+    rollupOptions: {
+      output: { manualChunks: undefined },
+      // @workspace/core is a barrel whose modules only declare exports; without this, its yjs/zod/marked
+      // imports (needed only by the lazy editor and database chunks) end up in the initial shell.
+      treeshake: { moduleSideEffects: [{ test: /packages[\\/]core[\\/]src[\\/]/, sideEffects: false }] },
+    },
   },
 });

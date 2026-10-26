@@ -1,4 +1,6 @@
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
+import { CLOSE } from "@workspace/core/sync";
+import { addNetworkStateListener } from "expo-network";
 import { useEffect } from "react";
 import { AppState } from "react-native";
 import { openSocket, setOnline } from "./api";
@@ -17,6 +19,7 @@ export function useWorkspaceEvents(workspaceId: string | null) {
   useEffect(() => {
     if (!workspaceId) return;
     let ws: WebSocket | null = null;
+    let connecting = false;
     let stopped = false;
     let opened = false;
     let retry = 0;
@@ -24,8 +27,9 @@ export function useWorkspaceEvents(workspaceId: string | null) {
     let ping: ReturnType<typeof setInterval> | undefined;
 
     const connect = async () => {
-      if (stopped || ws) return;
-      const sock = await openSocket(`/events/${workspaceId}`);
+      if (stopped || ws || connecting) return;
+      connecting = true;
+      const sock = await openSocket(`/events/${workspaceId}`).finally(() => (connecting = false));
       if (stopped) return sock.close(1000);
       ws = sock;
       sock.onopen = () => {
@@ -45,25 +49,30 @@ export function useWorkspaceEvents(workspaceId: string | null) {
           /* ignore malformed */
         }
       };
-      sock.onclose = () => {
+      sock.onclose = (e: CloseEvent) => {
         clearInterval(ping);
         if (ws === sock) ws = null;
         if (stopped) return;
-        timer = setTimeout(() => void connect(), Math.min(30_000, 1000 * 2 ** retry++));
+        // Membership or session changed: refresh the workspace list (the shell reacts to losing access).
+        if (e.code === CLOSE.forbidden || e.code === CLOSE.unauthenticated) void queryClient.invalidateQueries({ queryKey: ["me"] });
+        timer = setTimeout(() => void connect(), Math.min(30_000, 1000 * 2 ** retry++) * (0.5 + Math.random() / 2));
       };
     };
-    void connect();
-    const sub = AppState.addEventListener("change", (s) => {
-      if (s !== "active" || ws) return;
+    const now = () => {
+      if (ws) return;
       clearTimeout(timer);
       retry = 0;
       void connect();
-    });
+    };
+    void connect();
+    const app = AppState.addEventListener("change", (s) => s === "active" && now());
+    const net = addNetworkStateListener((s) => s.isConnected && s.isInternetReachable !== false && now());
     return () => {
       stopped = true;
       clearTimeout(timer);
       clearInterval(ping);
-      sub.remove();
+      app.remove();
+      net.remove();
       ws?.close(1000);
     };
   }, [workspaceId, queryClient]);

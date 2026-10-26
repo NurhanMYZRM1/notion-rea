@@ -29,6 +29,7 @@ export default function SignIn() {
   };
 
   const p = providers.data;
+  const apple = !!p?.apple && Platform.OS === "ios"; // Sign in with Apple is offered on iOS only
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: colors.grouped }}>
       <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24, gap: 16 }}>
@@ -54,7 +55,7 @@ export default function SignIn() {
             onPress={run("google", () => authClient.signIn.social({ provider: "google", callbackURL: "/" }))}
           />
         )}
-        {p?.apple && Platform.OS === "ios" && (
+        {apple && (
           <AppleAuthentication.AppleAuthenticationButton
             buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
             buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
@@ -69,7 +70,7 @@ export default function SignIn() {
             })}
           />
         )}
-        {p && !p.google && !p.apple && !p.testLogin && (
+        {p && !p.google && !apple && !p.testLogin && (
           <Text selectable style={{ fontSize: 15, color: colors.secondaryLabel }}>
             No sign-in method is configured on this server yet.
           </Text>

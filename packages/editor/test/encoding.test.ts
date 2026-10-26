@@ -33,3 +33,26 @@ describe("editor <-> server encoding", () => {
     editor.destroy();
   });
 });
+
+describe("WorkspaceEditor mount", () => {
+  it("reaches onReady and assigns block ids (UniqueID needs provider.on/off)", async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const [{ act, createElement }, { createRoot }, { Awareness }, { WorkspaceEditor }] = await Promise.all([
+      import("react"),
+      import("react-dom/client"),
+      import("y-protocols/awareness"),
+      import("../src/Editor"),
+    ]);
+    const doc = new Y.Doc();
+    doc.getXmlFragment(FRAGMENT).insert(0, [jsonToY({ type: "paragraph", content: [{ type: "text", text: "no id yet" }] })]);
+    let ready = false;
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    await act(async () => {
+      root.render(createElement(WorkspaceEditor, { doc, awareness: new Awareness(doc), user: { name: "T", color: "#000" }, editable: true, onReady: () => (ready = true) }));
+    });
+    for (let i = 0; i < 50 && !ready; i++) await act(() => new Promise((r) => setTimeout(r, 10)));
+    expect(ready).toBe(true);
+    expect(typeof yToJSON(doc.getXmlFragment(FRAGMENT)).content![0]!.attrs?.id).toBe("string");
+    await act(async () => root.unmount());
+  });
+});

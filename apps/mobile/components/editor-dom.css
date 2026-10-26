@@ -1,0 +1,51 @@
+/* Host tokens for @workspace/editor (light + dark), sized from the system text style (Dynamic Type on iOS). */
+:root {
+  color-scheme: light dark;
+  --fg: #1f1f1f;
+  --muted: #6b6a66;
+  --line: #e3e3e0;
+  --hover: rgba(55, 53, 47, 0.08);
+  --accent: #0a7aff;
+  --surface: #ffffff;
+  --code-bg: rgba(135, 131, 120, 0.15);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #ececec;
+    --muted: #a3a3a3;
+    --line: #3a3a3c;
+    --hover: rgba(255, 255, 255, 0.1);
+    --accent: #409cff;
+    --surface: #1c1c1e;
+    --code-bg: rgba(135, 131, 120, 0.3);
+    --code-fg: #ff8a80;
+  }
+}
+html {
+  font: -apple-system-body;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+html,
+body {
+  margin: 0;
+  background: transparent;
+  color: var(--fg);
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+}
+#root {
+  display: block;
+}
+.mobile-editor {
+  padding: 4px 16px 0;
+}
+.ws-doc {
+  font-size: 1rem;
+}
+/* --kb is the keyboard overlap (set from visualViewport); the safe-area padding is not needed above it. */
+.ws-fixed-toolbar {
+  bottom: var(--kb, 0px);
+}
+.kb-open .ws-fixed-toolbar {
+  padding-bottom: 4px;
+}

@@ -191,7 +191,7 @@ export async function updatePage(env: Env, actor: Actor, pageId: string, raw: un
   if (input.title !== undefined) {
     await env.DB.prepare("UPDATE search_docs SET title = ? WHERE page_id = ?").bind(row.title, pageId).run();
   }
-  await publish(env, access.workspaceId, [["page", pageId], ["pages", row.parent_id], ...(row.database_id ? [["database", row.database_id]] : [])]);
+  await publish(env, access.workspaceId, [["page", pageId], ["pages", row.parent_id], ["recents"], ["favorites"], ...(row.database_id ? [["database", row.database_id]] : [])]);
   return toSummary(env, row);
 }
 

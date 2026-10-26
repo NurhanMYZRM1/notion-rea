@@ -39,7 +39,11 @@ export async function restoreQueries(qc: QueryClient, userId: string): Promise<b
   try {
     const d = await db(userId);
     const state = await req<DehydratedState | undefined>(d.transaction("kv").objectStore("kv").get("cache"));
-    if (state) hydrate(qc, state);
+    if (state) {
+      hydrate(qc, state);
+      // Restored data may predate changes made elsewhere: show it, but refetch whatever is mounted.
+      void qc.invalidateQueries({ refetchType: "none" });
+    }
     return !!state;
   } catch {
     return false;
@@ -68,7 +72,8 @@ export function persistQueries(qc: QueryClient, userId: string) {
     }
   };
   const unsub = qc.getQueryCache().subscribe((e) => {
-    if (e.type === "updated" && e.action.type === "success" && PERSISTED.has(String(e.query.queryKey[0]))) timer ??= setTimeout(() => void save(), 700);
+    const changed = (e.type === "updated" && e.action.type === "success") || e.type === "removed";
+    if (changed && PERSISTED.has(String(e.query.queryKey[0]))) timer ??= setTimeout(() => void save(), 700);
   });
   const stop = () => {
     unsub();

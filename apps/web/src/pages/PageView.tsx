@@ -1,13 +1,14 @@
 import { ApiRequestError, can, type Me, newId, type PageDetail, type PageSummary } from "@workspace/core";
 import type { SyncState } from "@workspace/core/sync";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
 import { api, conflictCurrent, download, errorMessage, fileSafe, initials, userColor } from "../api";
 import { RecordProperties } from "../database/cells";
+import { UnsyncedDrafts } from "../drafts";
 import { invalidatePage, qk, roleIn, usePage } from "../queries";
 import { Link, navigate, setSearchParam, useLocation } from "../router";
 import { MoveDialog, Warnings } from "../shell/dialogs";
-import { TopBar } from "../shell/Shell";
+import { createPageIn, TopBar } from "../shell/Shell";
 import { createStore, Dialog, Menu, OnlineButton, relTime, Spinner, type Store, toast, useOnline, useStore } from "../ui";
 
 const DocEditor = lazy(() => import("../editor/DocEditor"));
@@ -22,7 +23,9 @@ export interface Peer {
 export default function PageView({ id, me }: { id: string; me: Me }) {
   const qc = useQueryClient();
   const q = usePage(id);
-  const page = q.data;
+  // A 404 on refetch wins over cached metadata (the page was deleted or access was lost).
+  const gone = q.isError && q.error instanceof ApiRequestError && q.error.status === 404;
+  const page = gone ? undefined : q.data;
   const { search } = useLocation();
   const [syncStore] = useState(() => createStore<SyncState | null>(null));
   const [presence] = useState(() => createStore<Peer[]>([]));
@@ -32,8 +35,8 @@ export default function PageView({ id, me }: { id: string; me: Me }) {
   const user = useMemo(() => ({ name: me.user.name || me.user.email, color: userColor(me.user.id) }), [me.user.name, me.user.email, me.user.id]);
 
   useEffect(() => {
-    document.title = `${page?.title || "Untitled"} · Workspace`;
-  }, [page?.title]);
+    if (page) document.title = `${page.title || "Untitled"} · Workspace`;
+  }, [page]);
   const wsId = page?.workspaceId;
   useEffect(() => {
     if (!wsId || !navigator.onLine) return;
@@ -59,6 +62,7 @@ export default function PageView({ id, me }: { id: string; me: Me }) {
               </>
             ) : (
               <>
+                <UnsyncedDrafts />
                 <h1>Page not found</h1>
                 <p className="muted">{q.error instanceof ApiRequestError && q.error.status === 404 ? "It may have been deleted, or you don't have access." : errorMessage(q.error)}</p>
               </>
@@ -127,6 +131,7 @@ export default function PageView({ id, me }: { id: string; me: Me }) {
             label="Page actions"
             items={[
               { label: "Export Markdown", onSelect: () => void exportMd(), disabledReason: offlineReason },
+              editable && !page.databaseId && !page.isDatabase && { label: "Add a sub-page", onSelect: () => void createPageIn(qc, page.workspaceId, id), disabledReason: offlineReason },
               editable && !page.databaseId && { label: "Move to…", onSelect: () => setMoveOpen(true), disabledReason: offlineReason },
               canArchive && !archived && { label: "Move to trash", onSelect: () => void trash(), danger: true, disabledReason: offlineReason },
             ]}
@@ -135,6 +140,11 @@ export default function PageView({ id, me }: { id: string; me: Me }) {
           </Menu>
         </div>
       </TopBar>
+      {role === "viewer" && !archived && (
+        <div className="banner banner-info page-banner" role="region" aria-label="View only">
+          You can view this page but not edit it. Ask a workspace owner for edit access.
+        </div>
+      )}
       {archived && (
         <div className="banner banner-warn page-banner" role="region" aria-label="Page in trash">
           <span>This page is in the trash{page.archivedAt ? ` (moved ${relTime(page.archivedAt)})` : ""}. It's read-only until restored.</span>
@@ -230,18 +240,14 @@ function Presence({ store }: { store: Store<Peer[]> }) {
   const peers = useStore(store);
   if (!peers.length) return null;
   return (
-    <ul className="avatars" aria-label={`Also here: ${peers.map((p) => p.name).join(", ")}`}>
+    <div className="avatars" role="img" aria-label={`Also here: ${peers.map((p) => p.name).join(", ")}`}>
       {peers.slice(0, 4).map((p) => (
-        <li key={p.key} className="avatar" style={{ background: p.color }} title={p.name} aria-hidden="true">
+        <span key={p.key} className="avatar" style={{ background: p.color }} title={p.name}>
           {initials(p.name)}
-        </li>
+        </span>
       ))}
-      {peers.length > 4 && (
-        <li className="avatar avatar-more" aria-hidden="true">
-          +{peers.length - 4}
-        </li>
-      )}
-    </ul>
+      {peers.length > 4 && <span className="avatar avatar-more">+{peers.length - 4}</span>}
+    </div>
   );
 }
 
@@ -263,6 +269,13 @@ function FavoriteButton({ page }: { page: PageDetail }) {
       {page.favorite ? "★" : "☆"}
     </OnlineButton>
   );
+}
+
+/** Titles and icons also show in the tree, favorites and recents (the event channel only invalidates the tree). */
+function invalidateListings(qc: QueryClient, page: PageDetail) {
+  void qc.invalidateQueries({ queryKey: qk.children(page.workspaceId, page.parentId) });
+  void qc.invalidateQueries({ queryKey: qk.recents(page.workspaceId) });
+  void qc.invalidateQueries({ queryKey: qk.favorites(page.workspaceId) });
 }
 
 /** Saves title edits with the page revision; on 409 keeps whichever value is newer. */
@@ -292,7 +305,7 @@ function TitleField({ page, editable, autoFocus }: { page: PageDetail; editable:
         const r = await api.updatePage(page.id, { expectedRevision: revision, title });
         qc.setQueryData<PageDetail>(qk.page(page.id), (p) => (p ? { ...p, title: r.page.title, revision: r.page.revision, updatedAt: r.page.updatedAt } : p));
         if (ref.current?.value === title) dirty.current = false;
-        void qc.invalidateQueries({ queryKey: qk.children(page.workspaceId, page.parentId) });
+        invalidateListings(qc, page);
         if (page.databaseId) void qc.invalidateQueries({ queryKey: qk.database(page.databaseId) });
         return;
       } catch (err) {
@@ -378,7 +391,7 @@ function IconField({ page, editable }: { page: PageDetail; editable: boolean }) 
         r = await attempt(current.revision);
       }
       qc.setQueryData<PageDetail>(qk.page(page.id), (p) => (p ? { ...p, icon: r.page.icon, revision: r.page.revision } : p));
-      void qc.invalidateQueries({ queryKey: qk.children(page.workspaceId, page.parentId) });
+      invalidateListings(qc, page);
       setOpen(false);
     } catch (err) {
       toast(errorMessage(err), "error");
@@ -413,7 +426,7 @@ function IconField({ page, editable }: { page: PageDetail; editable: boolean }) 
           <label className="field" htmlFor={inputId}>
             <span>Emoji or short text</span>
           </label>
-          <input id={inputId} className="input" autoFocus maxLength={16} value={value} onChange={(e) => setValue(e.target.value)} />
+          <input id={inputId} className="input" data-autofocus maxLength={16} value={value} onChange={(e) => setValue(e.target.value)} />
           <div className="emoji-grid" role="group" aria-label="Suggestions">
             {EMOJI.map((e) => (
               <button key={e} type="button" className="icon-btn emoji" aria-label={`Use ${e}`} onClick={() => setValue(e)}>

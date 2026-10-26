@@ -39,7 +39,7 @@ export function SearchDialog({ ws, onClose }: { ws: string; onClose: () => void 
   return (
     <Dialog title="Search" onClose={onClose} className="search-dialog">
       <input
-        autoFocus
+        data-autofocus
         type="search"
         className="search-input"
         role="combobox"

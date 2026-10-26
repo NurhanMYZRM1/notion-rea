@@ -7,7 +7,7 @@ import { useSyncExternalStore } from "react";
 
 // Hermes has no WebCrypto; @workspace/core ids (newId) need getRandomValues.
 const g = globalThis as { crypto?: { getRandomValues?: unknown } };
-if (!g.crypto?.getRandomValues) g.crypto = { ...(g.crypto ?? {}), getRandomValues };
+if (!g.crypto?.getRandomValues) g.crypto = { ...g.crypto, getRandomValues };
 
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8787").replace(/\/$/, "");
 export const WS_URL = API_URL.replace(/^http/, "ws");
@@ -65,6 +65,12 @@ export const api = createApiClient({
 type RNWebSocketCtor = new (url: string, protocols: string | string[] | undefined, options: { headers: Record<string, string> }) => WebSocket;
 export async function openSocket(path: string): Promise<WebSocket> {
   return new (WebSocket as unknown as RNWebSocketCtor)(`${WS_URL}${path}`, undefined, { headers: await authHeaders() });
+}
+
+/** The server's current copy carried by a 409 (`details.current`), or null for any other error. */
+export function conflictCurrent<T>(err: unknown): T | null {
+  if (!(err instanceof ApiRequestError) || err.code !== "conflict") return null;
+  return (err.details as { current?: T } | undefined)?.current ?? null;
 }
 
 export function errorMessage(err: unknown): string {
