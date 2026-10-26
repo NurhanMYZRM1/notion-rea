@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Y from "yjs";
-import { attachmentId, BRIDGE_VERSION, decodeMsg, encodeMsg, fromBase64, navigationAllowed, safeExternalUrl, toBase64 } from "../lib/bridge.ts";
+import {
+  attachmentId,
+  BRIDGE_VERSION,
+  decodeMsg,
+  encodeMsg,
+  fromBase64,
+  navigationAllowed,
+  safeExternalUrl,
+  toBase64,
+} from "../lib/bridge.ts";
 
 test("base64 round-trips every byte value and large buffers", () => {
   const all = Uint8Array.from({ length: 256 }, (_, i) => i);
@@ -14,7 +23,9 @@ test("base64 round-trips every byte value and large buffers", () => {
 test("a Yjs update survives the envelope and converges a second doc", () => {
   const a = new Y.Doc();
   const b = new Y.Doc();
-  a.on("update", (u: Uint8Array) => Y.applyUpdate(b, decodeMsg(JSON.parse(JSON.stringify(encodeMsg(u))))));
+  a.on("update", (u: Uint8Array) =>
+    Y.applyUpdate(b, decodeMsg(JSON.parse(JSON.stringify(encodeMsg(u))))),
+  );
   a.getText("t").insert(0, "héllo 日本語 שלום 👋");
   assert.equal(b.getText("t").toString(), "héllo 日本語 שלום 👋");
   const msg = encodeMsg(Y.encodeStateAsUpdate(a));
@@ -25,14 +36,20 @@ test("a Yjs update survives the envelope and converges a second doc", () => {
 });
 
 test("decode rejects wrong versions and malformed payloads", () => {
-  assert.throws(() => decodeMsg({ v: 2, b64: "AA==" }), /version/);
-  assert.throws(() => decodeMsg({ v: 1, b64: "<script>" }), /payload/);
+  assert.throws(() => decodeMsg({ v: 1, b64: "AA==" }), /version/);
+  assert.throws(
+    () => decodeMsg({ v: BRIDGE_VERSION, b64: "<script>" }),
+    /payload/,
+  );
   assert.throws(() => decodeMsg(null), /message/);
   assert.throws(() => decodeMsg("AA=="), /message/);
 });
 
 test("only http(s) and mailto links may leave the editor", () => {
-  assert.equal(safeExternalUrl("https://example.com/a?b=1"), "https://example.com/a?b=1");
+  assert.equal(
+    safeExternalUrl("https://example.com/a?b=1"),
+    "https://example.com/a?b=1",
+  );
   assert.equal(safeExternalUrl("mailto:a@example.com"), "mailto:a@example.com");
   assert.equal(safeExternalUrl("javascript:alert(1)"), null);
   assert.equal(safeExternalUrl("file:///etc/passwd"), null);
@@ -47,18 +64,30 @@ test("a keystroke crosses the bridge as a small incremental update, not the docu
   const sent: string[] = [];
   web.on("update", (u: Uint8Array) => sent.push(encodeMsg(u).b64));
   web.getText("t").insert(0, "x".repeat(200_000));
-  Y.applyUpdate(native, decodeMsg({ v: 1, b64: sent.pop()! }));
+  Y.applyUpdate(native, decodeMsg({ v: BRIDGE_VERSION, b64: sent.pop()! }));
   web.getText("t").insert(100, "é");
   const keystroke = sent.pop()!;
-  assert.ok(keystroke.length < 100, `keystroke payload was ${keystroke.length} chars`);
-  Y.applyUpdate(native, decodeMsg({ v: 1, b64: keystroke }));
+  assert.ok(
+    keystroke.length < 100,
+    `keystroke payload was ${keystroke.length} chars`,
+  );
+  Y.applyUpdate(native, decodeMsg({ v: BRIDGE_VERSION, b64: keystroke }));
   assert.equal(native.getText("t").toString(), web.getText("t").toString());
 });
 
 test("only our attachment paths are fetched with the session cookie", () => {
-  assert.equal(attachmentId("/api/attachments/att_0123456789abcdef"), "att_0123456789abcdef");
-  assert.equal(attachmentId("https://evil.example/api/attachments/att_0123456789abcdef"), null);
-  assert.equal(attachmentId("/api/attachments/att_0123456789abcdef/../../me"), null);
+  assert.equal(
+    attachmentId("/api/attachments/att_0123456789abcdef"),
+    "att_0123456789abcdef",
+  );
+  assert.equal(
+    attachmentId("https://evil.example/api/attachments/att_0123456789abcdef"),
+    null,
+  );
+  assert.equal(
+    attachmentId("/api/attachments/att_0123456789abcdef/../../me"),
+    null,
+  );
   assert.equal(attachmentId("/api/me"), null);
   assert.equal(attachmentId(null), null);
 });

@@ -1,0 +1,16 @@
+# Starts on the already authenticated local native Home screen.
+appId: com.workspace.app
+---
+- tapOn: "Mobile QA grandchild"
+- extendedWaitUntil:
+    visible: "Sync status: Synced"
+    timeout: 30000
+- takeScreenshot: android-document-synced
+- tapOn: "Tap to write, type / for blocks"
+- inputText: "Android editor verification"
+- assertVisible: "Bold"
+- hideKeyboard
+- extendedWaitUntil:
+    visible: "Sync status: Synced"
+    timeout: 30000
+- takeScreenshot: android-document-edit-synced

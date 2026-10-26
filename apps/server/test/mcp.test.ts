@@ -98,6 +98,20 @@ async function setup() {
 }
 
 describe("MCP over OAuth", () => {
+  it("cannot use generic block edits to bypass subpage lifecycle permissions", async () => {
+    const { owner, ws } = await setup();
+    const parent = (await api(owner, "POST", `/api/w/${ws}/pages`, { title: "Parent" })).body.page;
+    const child = (await api(owner, "POST", `/api/pages/${parent.id}/subpages`, { id: "pg_mcpowningchild001", title: "Protected" })).body.page;
+    const document = (await api(owner, "GET", `/api/pages/${parent.id}/document`)).body;
+    const block = document.doc.content.find((n: { type: string }) => n.type === "childPage");
+    const { access_token: at } = await authorize(owner, ws, ["workspace:write"]);
+    const deleted = await call(at, "edit_blocks", { pageId: parent.id, expectedRevision: document.revision, ops: [{ op: "delete", blockId: block.attrs.id }] });
+    expect(deleted.result?.structuredContent.error.code).toBe("invalid_input");
+    const forged = await call(at, "edit_blocks", { pageId: parent.id, ops: [{ op: "insert", at: { position: "end" }, content: { blocks: [block] } }] });
+    expect(forged.result?.structuredContent.error.code).toBe("invalid_input");
+    expect((await api(owner, "GET", `/api/pages/${child.id}`)).body.page.state).toBe("active");
+  });
+
   it("rejects unauthenticated requests with a resource-metadata challenge", async () => {
     const r = await mcp(null, "tools/list");
     expect(r.status).toBe(401);

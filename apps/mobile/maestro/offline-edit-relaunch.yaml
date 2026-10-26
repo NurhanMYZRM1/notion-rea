@@ -15,7 +15,6 @@ env:
     visible: "Sync status: Offline|Sync status: Saved on device"
     timeout: 20000
 - tapOn: "Typed by Maestro.*"
-- pressKey: End
 - inputText: " ${OFFLINE_TEXT}"
 - extendedWaitUntil:
     visible: "Sync status: Saved on device"

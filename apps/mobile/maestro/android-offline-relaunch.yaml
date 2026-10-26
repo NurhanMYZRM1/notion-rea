@@ -1,0 +1,12 @@
+# Run after android-offline-edit.yaml and a cold start, with API reverse still removed.
+appId: com.workspace.app
+---
+- extendedWaitUntil:
+    visible: "Mobile QA grandchild"
+    timeout: 30000
+- tapOn: "Mobile QA grandchild"
+- extendedWaitUntil:
+    visible: ".*retained offline.*"
+    timeout: 30000
+- assertVisible: "Sync status: Saved on device"
+- takeScreenshot: android-offline-relaunch-retained

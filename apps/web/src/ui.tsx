@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { type ButtonHTMLAttributes, type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 
 // ---------- tiny external store (keeps fast-changing state out of big React trees) ----------
@@ -45,16 +46,24 @@ interface Toast {
   id: number;
   message: string;
   tone: "info" | "error";
+  action?: { label: string; onClick: () => void };
 }
 const toasts = createStore<Toast[]>([]);
 let toastSeq = 0;
 
-export function toast(message: string, tone: Toast["tone"] = "info") {
+export function toast(message: string, tone: Toast["tone"] = "info", action?: Toast["action"]) {
   const id = ++toastSeq;
-  toasts.set([...toasts.get().slice(-3), { id, message, tone }]);
-  setTimeout(() => dismiss(id), tone === "error" ? 8000 : 4500);
+  toasts.set([...toasts.get().slice(-3), { id, message, tone, action }]);
+  setTimeout(() => dismiss(id), action ? 10000 : tone === "error" ? 8000 : 4500);
 }
 const dismiss = (id: number) => toasts.set(toasts.get().filter((t) => t.id !== id));
+// The native host finishes downloads asynchronously after WebKit receives the file.
+window.addEventListener("workspace-download", (event) => {
+  const success = (event as CustomEvent<{ success?:boolean }>).detail?.success;
+  if (success === true) toast("Saved. Use File → Show Exports Folder to find your file.");
+  else if (success === false) toast("The file could not be saved. Try exporting again.", "error");
+});
+
 
 export function Toaster() {
   const list = useStore(toasts);
@@ -63,6 +72,7 @@ export function Toaster() {
       {list.map((t) => (
         <div key={t.id} className={`toast toast-${t.tone}`}>
           <span>{t.message}</span>
+          {t.action && <button className="btn-link" onClick={() => { dismiss(t.id); t.action?.onClick(); }}>{t.action.label}</button>}
           <button type="button" className="icon-btn" aria-label="Dismiss notification" onClick={() => dismiss(t.id)}>
             ×
           </button>
@@ -177,9 +187,10 @@ export function Menu(props: {
       if (!btn.current || !menu.current) return;
       const r = btn.current.getBoundingClientRect();
       const m = menu.current.getBoundingClientRect();
-      const below = r.bottom + 4 + m.height <= innerHeight || r.top < m.height + 8;
+      const height = Math.min(m.height, innerHeight - 16);
+      const below = r.bottom + 4 + height <= innerHeight || r.top < height + 8;
       const left = alignLeft ? Math.min(r.left, innerWidth - m.width - 8) : r.right - m.width;
-      setPos({ top: Math.max(8, below ? r.bottom + 4 : r.top - 4 - m.height), left: Math.max(8, left) });
+      setPos({ top: Math.max(8, Math.min(below ? r.bottom + 4 : r.top - 4 - height, innerHeight - height - 8)), left: Math.max(8, Math.min(left, innerWidth - m.width - 8)), maxHeight: "calc(100dvh - 16px)", overflowY: "auto" });
     };
     place();
     window.addEventListener("resize", place);
@@ -234,8 +245,8 @@ export function Menu(props: {
       >
         {props.children}
       </button>
-      {open && (
-        <div ref={menu} id={menuId} role="menu" aria-label={props.label} className="menu" style={pos} onKeyDown={onKey}>
+      {open && createPortal(
+        <div ref={menu} id={menuId} role="menu" aria-label={props.label} className="menu" style={pos} onKeyDown={onKey} onClick={(e) => e.stopPropagation()}>
           {items.map((item) => (
             <button
               key={item.label}
@@ -255,7 +266,7 @@ export function Menu(props: {
               {item.disabledReason && <span className="menu-reason">{item.disabledReason}</span>}
             </button>
           ))}
-        </div>
+        </div>, btn.current?.closest("dialog[open]") ?? document.body
       )}
     </div>
   );

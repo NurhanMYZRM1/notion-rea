@@ -11,7 +11,7 @@ export interface SlashItem {
   run: (editor: Editor, range: Range) => void;
 }
 
-export function slashItems(opts: { pickImage?: () => void; pickFile?: () => void }): SlashItem[] {
+export function slashItems(opts: { pickImage?: () => void; pickFile?: () => void; createPage?: () => void }): SlashItem[] {
   const chain = (e: Editor, r: Range) => e.chain().focus().deleteRange(r);
   const items: SlashItem[] = [
     { id: "text", title: "Text", hint: "Plain paragraph", keywords: "paragraph p", run: (e, r) => chain(e, r).setParagraph().run() },
@@ -26,6 +26,7 @@ export function slashItems(opts: { pickImage?: () => void; pickFile?: () => void
     { id: "code", title: "Code", hint: "Code block  ```", keywords: "pre snippet", run: (e, r) => chain(e, r).toggleCodeBlock().run() },
     { id: "divider", title: "Divider", hint: "Separate sections  ---", keywords: "hr rule line", run: (e, r) => chain(e, r).setHorizontalRule().run() },
   ];
+  if (opts.createPage) items.splice(1, 0, { id: "page", title: "Page", hint: "Add a subpage", keywords: "child subpage document", run: (e, r) => { chain(e, r).run(); opts.createPage!(); } });
   if (opts.pickImage) items.push({ id: "image", title: "Image", hint: "Upload an image", keywords: "picture photo", run: (e, r) => (chain(e, r).run(), opts.pickImage!()) });
   if (opts.pickFile) items.push({ id: "file", title: "File", hint: "Attach a file", keywords: "attachment upload pdf", run: (e, r) => (chain(e, r).run(), opts.pickFile!()) });
   return items;
@@ -63,7 +64,7 @@ const SlashMenu = forwardRef<MenuHandle, SuggestionProps<SlashItem>>(function Sl
       className="ws-slash"
       role="listbox"
       aria-label="Insert block"
-      style={{ position: "fixed", left: Math.min(rect.left, window.innerWidth - 300), top: rect.bottom + 6 }}
+      style={{ position: "fixed", left: Math.max(8, Math.min(rect.left, window.innerWidth - 296)), top: Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 336)), maxHeight: Math.max(100, window.innerHeight - 16) }}
     >
       {props.items.length === 0 && <div className="ws-slash-empty">No matching blocks</div>}
       {props.items.map((item, i) => (

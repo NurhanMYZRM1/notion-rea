@@ -32,7 +32,11 @@ export function useWorkspaceEvents(workspaceId: string | null) {
         } catch {
           return;
         }
-        if (msg.type === "invalidate") for (const key of msg.invalidate) void qc.invalidateQueries({ queryKey: key });
+        if (msg.type === "invalidate") {
+          for (const key of msg.invalidate) void qc.invalidateQueries({ queryKey: key });
+          // Ancestor titles and parent paths are embedded in every mounted PageDetail.
+          if (msg.invalidate.some((key) => key[0] === "hierarchy")) void qc.invalidateQueries({ queryKey: ["page"] });
+        }
         else if (msg.type === "revoked") void qc.invalidateQueries({ queryKey: qk.me });
       };
       s.onclose = (e) => {

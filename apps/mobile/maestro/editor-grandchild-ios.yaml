@@ -1,0 +1,20 @@
+# Continues on Mobile QA record child. Exercises the DOM picker → native host → ACK → subpage API.
+appId: com.workspace.app
+---
+- runFlow:
+    when:
+      notVisible: "Page Add a subpage"
+    commands:
+      - tapOn: "Insert block"
+- extendedWaitUntil:
+    visible: "Page Add a subpage"
+    timeout: 10000
+- tapOn: "Page Add a subpage"
+- extendedWaitUntil:
+    visible:
+      id: "page-title"
+    timeout: 15000
+- tapOn:
+    id: "page-title"
+- inputText: "Mobile QA grandchild"
+- takeScreenshot: ios-inline-grandchild

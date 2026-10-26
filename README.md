@@ -25,6 +25,12 @@ pnpm --filter server bootstrap -- --email you@example.com --name "Team"   # prin
 Local development has a test-only email sign-in (disabled in production) so you can sign in without
 Google. Sign in with the bootstrap email, then open the printed invite link.
 
+## Desktop app (Tauri / Rust)
+
+Run `pnpm desktop` to open Workspace in a native desktop window. It starts the local web/API server
+when needed and reuses the same workspace data. Run `pnpm desktop:build` to create a macOS `.app`.
+Setup and packaging details: [apps/desktop/README.md](apps/desktop/README.md).
+
 ## Checks
 
 ```bash

@@ -38,6 +38,7 @@ import {
 import {
   archivePage,
   createPage,
+  createSubpage,
   deletePermanently,
   getPage,
   listChildren,
@@ -51,6 +52,8 @@ import {
   updatePage,
 } from "./domain/pages";
 import { search } from "./domain/search";
+import { hierarchy } from "./domain/hierarchy";
+import { processPageReferences } from "./domain/page-references";
 import { AppError } from "./errors";
 import { backupDocuments, restoreDocuments } from "./backup";
 import { handleAuthorize } from "./oauth";
@@ -78,6 +81,18 @@ async function body(c: C): Promise<unknown> {
   if (!c.req.header("Content-Type")?.startsWith("application/json")) throw new AppError("unsupported", "Expected application/json");
   try {
     return await c.req.json();
+  } catch {
+    throw new AppError("invalid_input", "Malformed JSON");
+  }
+}
+
+async function optionalBody(c: C): Promise<unknown> {
+  // HTTP servers can expose an empty POST as a non-null, zero-byte request stream.
+  const text = await c.req.text();
+  if (!text.trim()) return {};
+  if (!c.req.header("Content-Type")?.startsWith("application/json")) throw new AppError("unsupported", "Expected application/json");
+  try {
+    return JSON.parse(text);
   } catch {
     throw new AppError("invalid_input", "Malformed JSON");
   }
@@ -174,6 +189,12 @@ export function buildApp() {
     return c.json(await listChildren(c.env, actorOf(c), ws(c), parentId, c.req.query("cursor") || null, Math.min(Number(c.req.query("limit") ?? 100) || 100, 200)));
   });
   app.post("/api/w/:ws/pages", async (c) => c.json({ page: await createPage(c.env, actorOf(c), ws(c), (await body(c)) as object) }, 201));
+  app.get("/api/w/:ws/hierarchy", async (c) => {
+    const parentId = c.req.query("parentId") || null;
+    const focusId = c.req.query("focusId") || null;
+    for (const id of [parentId, focusId]) if (id && !idParam.safeParse(id).success) throw new AppError("invalid_input", "Bad hierarchy page id");
+    return c.json(await hierarchy(c.env, actorOf(c), ws(c), { parentId, focusId, cursor: c.req.query("cursor"), limit: Number(c.req.query("limit")) || 100 }));
+  });
   app.get("/api/w/:ws/favorites", async (c) => c.json({ pages: await listPinned(c.env, actorOf(c), ws(c), "favorites") }));
   app.get("/api/w/:ws/recents", async (c) => c.json({ pages: await listPinned(c.env, actorOf(c), ws(c), "recents") }));
   app.get("/api/w/:ws/trash", async (c) => c.json({ pages: await listTrash(c.env, actorOf(c), ws(c)) }));
@@ -206,9 +227,10 @@ export function buildApp() {
   // ---------- pages ----------
   const pid = (c: C) => param(c, "id");
   app.get("/api/pages/:id", async (c) => c.json({ page: await getPage(c.env, actorOf(c), pid(c)) }));
+  app.post("/api/pages/:id/subpages", async (c) => c.json(await createSubpage(c.env, actorOf(c), pid(c), await body(c)), 201));
   app.patch("/api/pages/:id", async (c) => c.json({ page: await updatePage(c.env, actorOf(c), pid(c), await body(c)) }));
   app.post("/api/pages/:id/move", async (c) => c.json({ page: await movePage(c.env, actorOf(c), pid(c), await body(c)) }));
-  app.post("/api/pages/:id/archive", async (c) => c.json({ page: await archivePage(c.env, actorOf(c), pid(c)) }));
+  app.post("/api/pages/:id/archive", async (c) => c.json({ page: await archivePage(c.env, actorOf(c), pid(c), await optionalBody(c)) }));
   app.post("/api/pages/:id/restore", async (c) => c.json({ page: await restorePage(c.env, actorOf(c), pid(c)) }));
   app.delete("/api/pages/:id", async (c) => c.json(await deletePermanently(c.env, actorOf(c), pid(c))));
   app.put("/api/pages/:id/favorite", async (c) => {
@@ -306,6 +328,7 @@ export function buildApp() {
     } catch (err) {
       return closeSocket(err instanceof AppError && err.code === "not_found" ? CLOSE.notFound : CLOSE.forbidden, "no access");
     }
+    await processPageReferences(c.env, { workspaceId: access.workspaceId, parentIds: [pageId] });
     await c.env.DB.prepare(
       "INSERT INTO doc_sessions (page_id, user_id, workspace_id, connected_at) VALUES (?, ?, ?, ?) ON CONFLICT(page_id, user_id) DO UPDATE SET connected_at = excluded.connected_at",
     )
@@ -317,6 +340,7 @@ export function buildApp() {
     headers.set("X-Role", access.role);
     headers.set("X-Page-Id", pageId);
     headers.set("X-Page-State", access.page.state);
+    headers.set("X-Document-Schema-Version", c.req.query("schema") === "2" ? "2" : "1");
     return page(c.env, pageId).fetch(new Request(c.req.url, { headers }));
   });
 

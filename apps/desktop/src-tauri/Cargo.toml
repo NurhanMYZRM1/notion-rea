@@ -1,0 +1,24 @@
+[package]
+name = "workspace-desktop"
+version = "0.2.0"
+description = "Workspace desktop app"
+edition = "2024"
+rust-version = "1.90"
+
+[build-dependencies]
+tauri-build = { version = "=2.7.4", features = [] }
+
+[dependencies]
+anyhow = "1.0"
+unicode-normalization = "=0.1.26"
+unicode-casefold = "=0.2.0"
+open = "5.4"
+serde_json = "1.0"
+tauri = { version = "=2.12.5", features = [] }
+tauri-plugin-single-instance = "=2.5.4"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", features = ["signal", "process"] }
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

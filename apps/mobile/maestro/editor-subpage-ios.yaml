@@ -1,0 +1,7 @@
+# Starts on the disposable record subpage created from Graph. Preserves application data.
+appId: com.workspace.app
+---
+- tapOn:
+    id: "page-title"
+- inputText: "Mobile QA record child"
+- takeScreenshot: ios-record-subpage

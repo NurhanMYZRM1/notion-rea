@@ -15,6 +15,25 @@ export interface Sql {
   withTransactionAsync(task: () => Promise<void>): Promise<void>;
 }
 
+// A navigation stack can retain several mounted editors. Reference counts protect every one.
+const mountedDocs = new WeakMap<Sql, Map<string, number>>();
+export function pinDoc(sql: Sql, pageId: string): () => void {
+  let pins = mountedDocs.get(sql);
+  if (!pins) mountedDocs.set(sql, (pins = new Map()));
+  pins.set(pageId, (pins.get(pageId) ?? 0) + 1);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const n = (pins!.get(pageId) ?? 1) - 1;
+    if (n) pins!.set(pageId, n);
+    else pins!.delete(pageId);
+  };
+}
+export function isDocPinned(sql: Sql, pageId: string): boolean {
+  return !!mountedDocs.get(sql)?.has(pageId);
+}
+
 export const LIMITS = { docs: 20, bytes: 50 * 1024 * 1024, mergeAbove: 100 };
 
 export const SCHEMA = `
@@ -50,54 +69,96 @@ export async function migrate(sql: Sql): Promise<void> {
 }
 
 /** Register (or touch) a doc before its provider starts, so appends always have a meta row. */
-export async function openDoc(sql: Sql, pageId: string, workspaceId: string, title: string, now = Date.now()): Promise<{ cached: boolean }> {
+export async function openDoc(
+  sql: Sql,
+  pageId: string,
+  workspaceId: string,
+  title: string,
+  now = Date.now(),
+): Promise<{ cached: boolean }> {
   await sql.runAsync(
     `INSERT INTO docs (page_id, workspace_id, title, last_opened) VALUES (?, ?, ?, ?)
      ON CONFLICT(page_id) DO UPDATE SET last_opened = excluded.last_opened, title = CASE WHEN excluded.title = '' THEN docs.title ELSE excluded.title END`,
     [pageId, workspaceId, title, now],
   );
-  const row = await sql.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM updates WHERE page_id = ?", [pageId]);
+  const row = await sql.getFirstAsync<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM updates WHERE page_id = ?",
+    [pageId],
+  );
   return { cached: (row?.n ?? 0) > 0 };
 }
 
 export function docStore(sql: Sql, pageId: string): DocStore {
   return {
     async load() {
-      const meta = await sql.getFirstAsync<{ local_counter: number; synced_counter: number }>(
-        "SELECT local_counter, synced_counter FROM docs WHERE page_id = ?",
+      const meta = await sql.getFirstAsync<{
+        local_counter: number;
+        synced_counter: number;
+      }>("SELECT local_counter, synced_counter FROM docs WHERE page_id = ?", [
+        pageId,
+      ]);
+      const rows = await sql.getAllAsync<{ id: number; data: Uint8Array }>(
+        "SELECT id, data FROM updates WHERE page_id = ? ORDER BY id",
         [pageId],
       );
-      const rows = await sql.getAllAsync<{ id: number; data: Uint8Array }>("SELECT id, data FROM updates WHERE page_id = ? ORDER BY id", [pageId]);
       let updates = rows.map((r) => r.data);
       if (rows.length > LIMITS.mergeAbove) {
         const merged = Y.mergeUpdates(updates);
         const lastId = rows[rows.length - 1]!.id;
         await sql.withTransactionAsync(async () => {
-          await sql.runAsync("DELETE FROM updates WHERE page_id = ? AND id <= ?", [pageId, lastId]);
-          await sql.runAsync("INSERT INTO updates (page_id, data, counter) VALUES (?, ?, NULL)", [pageId, merged]);
-          await sql.runAsync("UPDATE docs SET bytes = (SELECT COALESCE(SUM(length(data)), 0) FROM updates WHERE page_id = ?) WHERE page_id = ?", [pageId, pageId]);
+          await sql.runAsync(
+            "DELETE FROM updates WHERE page_id = ? AND id <= ?",
+            [pageId, lastId],
+          );
+          await sql.runAsync(
+            "INSERT INTO updates (page_id, data, counter) VALUES (?, ?, NULL)",
+            [pageId, merged],
+          );
+          await sql.runAsync(
+            "UPDATE docs SET bytes = (SELECT COALESCE(SUM(length(data)), 0) FROM updates WHERE page_id = ?) WHERE page_id = ?",
+            [pageId, pageId],
+          );
         });
         updates = [merged];
       }
-      return { updates, localCounter: meta?.local_counter ?? 0, syncedCounter: meta?.synced_counter ?? 0 };
+      return {
+        updates,
+        localCounter: meta?.local_counter ?? 0,
+        syncedCounter: meta?.synced_counter ?? 0,
+      };
     },
     // Resolves only after SQLite committed the row (WAL, synchronous=FULL): "Saved on device" is never early.
     async append(update, localCounter) {
-      await sql.runAsync("INSERT INTO updates (page_id, data, counter) VALUES (?, ?, ?)", [pageId, update, localCounter]);
+      await sql.runAsync(
+        "INSERT INTO updates (page_id, data, counter) VALUES (?, ?, ?)",
+        [pageId, update, localCounter],
+      );
     },
     async markSynced(counter, revision) {
-      await sql.runAsync("UPDATE docs SET synced_counter = MAX(synced_counter, ?), revision = ? WHERE page_id = ?", [counter, revision, pageId]);
+      await sql.runAsync(
+        "UPDATE docs SET synced_counter = MAX(synced_counter, ?), revision = ? WHERE page_id = ?",
+        [counter, revision, pageId],
+      );
     },
   };
 }
 
 /** LRU eviction to `LIMITS`; never evicts docs with unsynced local edits or `keep`. Returns evicted ids. */
-export async function evict(sql: Sql, keep: string | null, limits = LIMITS): Promise<string[]> {
-  const rows = await sql.getAllAsync<{ page_id: string; bytes: number; dirty: number }>(
+export async function evict(
+  sql: Sql,
+  keep: string | null,
+  limits = LIMITS,
+): Promise<string[]> {
+  const rows = await sql.getAllAsync<{
+    page_id: string;
+    bytes: number;
+    dirty: number;
+  }>(
     "SELECT page_id, bytes, local_counter > synced_counter AS dirty FROM docs ORDER BY last_opened DESC",
     [],
   );
-  const pinned = (r: (typeof rows)[number]) => !!r.dirty || r.page_id === keep;
+  const pinned = (r: (typeof rows)[number]) =>
+    !!r.dirty || r.page_id === keep || isDocPinned(sql, r.page_id);
   // Pinned docs take budget first; the rest fill what is left, newest first.
   let count = 0;
   let bytes = 0;
@@ -108,7 +169,8 @@ export async function evict(sql: Sql, keep: string | null, limits = LIMITS): Pro
   const victims: string[] = [];
   for (const r of rows) {
     if (pinned(r)) continue;
-    if (count + 1 > limits.docs || bytes + r.bytes > limits.bytes) victims.push(r.page_id);
+    if (count + 1 > limits.docs || bytes + r.bytes > limits.bytes)
+      victims.push(r.page_id);
     else {
       count++;
       bytes += r.bytes;
@@ -141,23 +203,48 @@ export async function pendingDrafts(sql: Sql): Promise<Draft[]> {
   );
 }
 
-export async function cacheStatus(sql: Sql): Promise<{ docs: number; bytes: number; drafts: number; entries: number }> {
-  const d = await sql.getFirstAsync<{ docs: number; bytes: number; drafts: number }>(
+export async function cacheStatus(
+  sql: Sql,
+): Promise<{ docs: number; bytes: number; drafts: number; entries: number }> {
+  const d = await sql.getFirstAsync<{
+    docs: number;
+    bytes: number;
+    drafts: number;
+  }>(
     "SELECT COUNT(*) AS docs, COALESCE(SUM(bytes), 0) AS bytes, COALESCE(SUM(local_counter > synced_counter), 0) AS drafts FROM docs",
     [],
   );
-  const k = await sql.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM kv", []);
-  return { docs: d?.docs ?? 0, bytes: d?.bytes ?? 0, drafts: d?.drafts ?? 0, entries: k?.n ?? 0 };
+  const k = await sql.getFirstAsync<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM kv",
+    [],
+  );
+  return {
+    docs: d?.docs ?? 0,
+    bytes: d?.bytes ?? 0,
+    drafts: d?.drafts ?? 0,
+    entries: k?.n ?? 0,
+  };
 }
 
 /** Clear cached docs and metadata, keeping docs with unsynced edits. */
-export async function clearCache(sql: Sql, keep: string | null = null): Promise<void> {
-  const rows = await sql.getAllAsync<{ page_id: string }>("SELECT page_id FROM docs WHERE local_counter <= synced_counter", []);
+export async function clearCache(
+  sql: Sql,
+  keep: string | null = null,
+): Promise<void> {
+  const rows = await sql.getAllAsync<{ page_id: string }>(
+    "SELECT page_id FROM docs WHERE local_counter <= synced_counter",
+    [],
+  );
   await dropDocs(
     sql,
-    rows.map((r) => r.page_id).filter((id) => id !== keep),
+    rows
+      .map((r) => r.page_id)
+      .filter((id) => id !== keep && !isDocPinned(sql, id)),
   );
-  await sql.runAsync("DELETE FROM kv WHERE key NOT LIKE 'pref:%'", []);
+  await sql.runAsync(
+    "DELETE FROM kv WHERE key NOT LIKE 'pref:%' AND key NOT LIKE 'subpage-operation:%'",
+    [],
+  );
 }
 
 /** Load a stored doc into a fresh Y.Doc (for exporting a draft that is not open). */
@@ -169,14 +256,20 @@ export async function loadDoc(sql: Sql, pageId: string): Promise<Y.Doc> {
 }
 
 export async function kvGet<T>(sql: Sql, key: string): Promise<T | undefined> {
-  const row = await sql.getFirstAsync<{ value: string }>("SELECT value FROM kv WHERE key = ?", [key]);
+  const row = await sql.getFirstAsync<{ value: string }>(
+    "SELECT value FROM kv WHERE key = ?",
+    [key],
+  );
   return row ? (JSON.parse(row.value) as T) : undefined;
 }
 
-export async function kvSet(sql: Sql, key: string, value: unknown): Promise<void> {
-  await sql.runAsync("INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at", [
-    key,
-    JSON.stringify(value),
-    Date.now(),
-  ]);
+export async function kvSet(
+  sql: Sql,
+  key: string,
+  value: unknown,
+): Promise<void> {
+  await sql.runAsync(
+    "INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+    [key, JSON.stringify(value), Date.now()],
+  );
 }

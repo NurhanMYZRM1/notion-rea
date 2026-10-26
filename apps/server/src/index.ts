@@ -5,6 +5,7 @@ import { env as moduleEnv } from "cloudflare:workers";
 import { buildApp } from "./app";
 import { type AgentProps, createMcpServer, TOOL_SCOPES } from "./mcp/server";
 import { runScheduled } from "./scheduled";
+import { processPageReferences } from "./domain/page-references";
 
 export { PageDocument } from "./do/page";
 export { WorkspaceChannel } from "./do/workspace";
@@ -54,5 +55,7 @@ async function missingToolScopes(request: Request, granted: string[]): Promise<r
 
 export default {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) => provider.fetch(request, env, ctx),
-  scheduled: (controller: ScheduledController, env: Env, ctx: ExecutionContext) => ctx.waitUntil(runScheduled(env)),
+  scheduled: (controller: ScheduledController, env: Env, ctx: ExecutionContext) => ctx.waitUntil(
+    controller.cron === "* * * * *" ? processPageReferences(env) : runScheduled(env),
+  ),
 } satisfies ExportedHandler<Env>;

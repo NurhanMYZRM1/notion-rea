@@ -6,7 +6,7 @@ export interface ConversionReport {
   warnings: string[];
 }
 
-const SAFE_URL = /^(https?:|mailto:|\/api\/attachments\/)/i;
+const SAFE_URL = /^(https?:|mailto:|\/api\/attachments\/|\/p\/[^/?#]+$)/i;
 
 // ---------- Export: ProseMirror JSON -> Markdown ----------
 
@@ -61,6 +61,8 @@ function blockToMd(node: PMNode, report: ConversionReport): string | null {
       return `![${escapeText(String(node.attrs?.alt ?? ""))}](${String(node.attrs?.src ?? "")})`;
     case "fileAttachment":
       return `[${escapeText(String(node.attrs?.name ?? "file"))}](${String(node.attrs?.src ?? "")})`;
+    case "childPage":
+      return `[${escapeText(String(node.attrs?.title || "Untitled"))}](/p/${encodeURIComponent(String(node.attrs?.pageId ?? ""))})`;
     case "details": {
       const [summary, content] = node.content ?? [];
       const inner = blocksToMd(content?.content ?? [], report).join("\n\n");

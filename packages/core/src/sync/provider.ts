@@ -30,7 +30,7 @@ export interface SyncState {
   pendingLocal: boolean;
   revision: number | null;
   readOnly: false | "viewer" | "archived";
-  failure: null | "revoked" | "deleted" | "unauthenticated" | "error";
+  failure: null | "revoked" | "deleted" | "unauthenticated" | "upgrade-required" | "error";
 }
 
 export interface ProviderOptions {
@@ -67,6 +67,7 @@ export class SyncProvider {
   private attempted = false;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
+  private syncWaiters = new Set<() => void>();
   private state: SyncState = {
     phase: "loading",
     connected: false,
@@ -116,11 +117,37 @@ export class SyncProvider {
     this.awareness.off("update", this.onAwarenessUpdate);
     this.ws?.close(1000);
     this.ws = null;
+    this.emit({ connected: false });
   }
 
   /** Wait until local writes are on the device (used before navigation/background). */
   flushLocal(): Promise<void> {
     return this.appendChain;
+  }
+
+  /** Flush pending edits and wait for a durable server ACK, including the initial handshake. */
+  awaitSynced(timeoutMs = 15_000): Promise<void> {
+    this.flushBatch();
+    return new Promise<void>((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const finish = (error?: Error) => {
+        this.syncWaiters.delete(check);
+        if (timer) clearTimeout(timer);
+        if (error) reject(error);
+        else resolve();
+      };
+      const check = () => {
+        const s = this.state;
+        if (this.stopped) return finish(new Error("Document session closed"));
+        if (s.failure) return finish(new Error(s.failure === "upgrade-required" ? "Update the app to edit this page" : `Document sync failed: ${s.failure}`));
+        if (s.readOnly) return finish(new Error("This page is read-only"));
+        if (!s.connected && this.attempted) return finish(new Error("Connect to the internet to change page structure"));
+        if (s.connected && this.handshakeDone && this.inflight.length === 0 && this.batch.length === 0 && this.syncedCounter >= this.localCounter && this.pendingAppends === 0) finish();
+      };
+      this.syncWaiters.add(check);
+      timer = setTimeout(() => finish(new Error("Timed out waiting for the page to finish syncing")), timeoutMs);
+      check();
+    });
   }
 
   private emit(patch: Partial<SyncState>) {
@@ -129,9 +156,10 @@ export class SyncProvider {
     if (s.failure) s.phase = "failed";
     else if (this.pendingAppends > 0) s.phase = "saving-local";
     else if (!s.connected) s.phase = s.pendingLocal ? "saved-device" : this.attempted ? "offline" : "loading";
-    else s.phase = s.pendingLocal || this.inflight.length || this.batch.length ? "syncing" : "synced";
+    else s.phase = !this.handshakeDone || s.pendingLocal || this.inflight.length || this.batch.length ? "syncing" : "synced";
     this.state = s;
     this.opts.onState?.(s);
+    for (const check of this.syncWaiters) check();
   }
 
   private onDocUpdate = (update: Uint8Array, origin: unknown) => {
@@ -259,6 +287,7 @@ export class SyncProvider {
     else if (c.type === "state") this.emit({ readOnly: c.state === "archived" ? "archived" : this.state.readOnly === "viewer" ? "viewer" : false });
     else if (c.type === "revoked") this.emit({ failure: "revoked" });
     else if (c.type === "deleted") this.emit({ failure: "deleted" });
+    else if (c.type === "upgrade-required") this.emit({ failure: "upgrade-required" });
     else if (c.type === "error") this.emit({ failure: "error" });
   }
 
@@ -273,6 +302,7 @@ export class SyncProvider {
     if (code === CLOSE.unauthenticated) this.state.failure = "unauthenticated";
     else if (code === CLOSE.forbidden) this.state.failure ??= "revoked";
     else if (code === CLOSE.deleted || code === CLOSE.notFound) this.state.failure ??= "deleted";
+    else if (code === CLOSE.upgradeRequired) this.state.failure = "upgrade-required";
     this.emit({ connected: false });
     if (!this.state.failure) this.scheduleRetry();
   }

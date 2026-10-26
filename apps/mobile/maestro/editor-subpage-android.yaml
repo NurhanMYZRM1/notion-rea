@@ -1,0 +1,44 @@
+# Starts at Home with the disposable Mobile QA grandchild cached and online.
+appId: com.workspace.app
+---
+- extendedWaitUntil:
+    visible: "Mobile QA grandchild"
+    timeout: 30000
+- tapOn: "Mobile QA grandchild"
+- extendedWaitUntil:
+    visible: "Sync status: Synced"
+    timeout: 30000
+- tapOn: "Insert block"
+- extendedWaitUntil:
+    visible: "Page Add a subpage"
+    timeout: 10000
+- tapOn: "Page Add a subpage"
+- extendedWaitUntil:
+    visible:
+      id: "page-title"
+    timeout: 15000
+- tapOn:
+    id: "page-title"
+- inputText: "Android QA nested page"
+- hideKeyboard
+- extendedWaitUntil:
+    visible: "Sync status: Synced"
+    timeout: 30000
+- back
+- extendedWaitUntil:
+    visible: "Open Android QA nested page"
+    timeout: 15000
+- takeScreenshot: android-inline-subpage
+- tapOn: "Open Android QA nested page"
+- assertVisible:
+    id: "page-title"
+- tapOn: "Page actions"
+- tapOn: "Move to trash"
+- extendedWaitUntil:
+    visible: "Undo"
+    timeout: 10000
+- tapOn: "Undo"
+- extendedWaitUntil:
+    visible: "Open Android QA nested page"
+    timeout: 15000
+- takeScreenshot: android-subpage-trash-undo

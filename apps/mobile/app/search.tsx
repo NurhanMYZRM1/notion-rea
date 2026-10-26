@@ -7,9 +7,10 @@ import { Loading, Message, Row } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
 import { openPage } from "@/lib/queries";
 import { useWorkspace } from "@/lib/session";
-import { colors } from "@/lib/theme";
+import { colors, useThemeScheme } from "@/lib/theme";
 
 export default function Search() {
+  useThemeScheme();
   const { current } = useWorkspace();
   const ws = current?.id ?? "";
   const [text, setText] = useState("");
@@ -56,14 +57,40 @@ export default function Search() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           style={{ backgroundColor: colors.grouped }}
-          ItemSeparatorComponent={() => <View style={{ height: 1, marginLeft: 16, backgroundColor: colors.separator }} />}
-          ListHeaderComponent={<Text style={{ padding: 16, paddingBottom: 6, color: colors.secondaryLabel, fontSize: 13 }}>{results.data.length} results</Text>}
+          ItemSeparatorComponent={() => (
+            <View
+              style={{
+                height: 1,
+                marginLeft: 16,
+                backgroundColor: colors.separator,
+              }}
+            />
+          )}
+          ListHeaderComponent={
+            <Text
+              style={{
+                padding: 16,
+                paddingBottom: 6,
+                color: colors.secondaryLabel,
+                fontSize: 13,
+              }}
+            >
+              {results.data.length} results
+            </Text>
+          }
           renderItem={({ item }) => (
             <Row
               title={item.title || "Untitled"}
               // FTS marks matches with [ ]; drop the markers for display.
               subtitle={item.snippet.replace(/[[\]]/g, "")}
-              onPress={() => openPage({ id: item.pageId, title: item.title, isDatabase: false, workspaceId: ws })}
+              onPress={() =>
+                openPage({
+                  id: item.pageId,
+                  title: item.title,
+                  isDatabase: false,
+                  workspaceId: ws,
+                })
+              }
             />
           )}
         />

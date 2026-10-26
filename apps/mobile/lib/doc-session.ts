@@ -1,12 +1,26 @@
-import { MSG_SYNC, SyncProvider, type SyncState } from "@workspace/core/sync";
+import {
+  DOCUMENT_SCHEMA_VERSION,
+  MSG_SYNC,
+  SyncProvider,
+  type SyncState,
+} from "@workspace/core/sync";
 import { addNetworkStateListener } from "expo-network";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
-import { applyAwarenessUpdate, Awareness, encodeAwarenessUpdate } from "y-protocols/awareness";
+import {
+  applyAwarenessUpdate,
+  Awareness,
+  encodeAwarenessUpdate,
+} from "y-protocols/awareness";
 import * as Y from "yjs";
 import { openSocket } from "./api";
-import { type BridgeMsg, decodeMsg, type EditorHandle, encodeMsg } from "./bridge";
-import { docStore, evict, openDoc, type Sql } from "./doc-store";
+import {
+  type BridgeMsg,
+  decodeMsg,
+  type EditorHandle,
+  encodeMsg,
+} from "./bridge";
+import { docStore, evict, openDoc, pinDoc, type Sql } from "./doc-store";
 
 /** Origin of updates that came from the editor WebView (local edits as far as the provider is concerned). */
 const WEBVIEW = "webview";
@@ -36,6 +50,7 @@ export class DocSession {
   private editable = false;
   private started = false;
   private stopped = false;
+  private unpin: (() => void) | null = null;
   private listeners = new Set<() => void>();
   view: DocView;
 
@@ -54,7 +69,13 @@ export class DocSession {
       connect: () => this.connect(),
       onState: (sync) => this.set({ sync }),
     });
-    this.view = { sync: this.provider.current, cached: false, serverState: false, initialized: false, unavailable: false };
+    this.view = {
+      sync: this.provider.current,
+      cached: false,
+      serverState: false,
+      initialized: false,
+      unavailable: false,
+    };
   }
 
   subscribe = (l: () => void) => {
@@ -69,7 +90,9 @@ export class DocSession {
   }
 
   private async connect(): Promise<WebSocket> {
-    const ws = await openSocket(`/sync/${this.pageId}`);
+    const ws = await openSocket(
+      `/sync/${this.pageId}?schema=${DOCUMENT_SCHEMA_VERSION}`,
+    );
     ws.addEventListener("message", (e: MessageEvent) => {
       if (this.view.serverState) return;
       const d = new Uint8Array(e.data as ArrayBuffer);
@@ -81,13 +104,20 @@ export class DocSession {
         }, 0);
     });
     ws.addEventListener("close", () => {
-      if (!this.view.serverState && !this.view.cached) this.set({ unavailable: true });
+      if (!this.view.serverState && !this.view.cached)
+        this.set({ unavailable: true });
     });
     return ws;
   }
 
   async start(): Promise<void> {
-    const { cached } = await openDoc(this.sql, this.pageId, this.workspaceId, this.title);
+    this.unpin ??= pinDoc(this.sql, this.pageId);
+    const { cached } = await openDoc(
+      this.sql,
+      this.pageId,
+      this.workspaceId,
+      this.title,
+    );
     if (this.stopped) return;
     this.set({ cached });
     await this.provider.start();
@@ -95,7 +125,9 @@ export class DocSession {
     this.started = true;
     this.doc.on("update", this.onDocUpdate);
     this.awareness.on("update", this.onAwarenessUpdate);
-    void evict(this.sql, this.pageId).catch((err) => console.warn("evict failed", err));
+    void evict(this.sql, this.pageId).catch((err) =>
+      console.warn("evict failed", err),
+    );
     this.maybeInit();
   }
 
@@ -109,11 +141,20 @@ export class DocSession {
   /** Cached docs open immediately; uncached ones wait for the server so the editor never binds an empty doc. */
   private maybeInit() {
     const h = this.handle;
-    if (!h || !this.started || this.view.initialized || (!this.view.cached && !this.view.serverState)) return;
+    if (
+      !h ||
+      !this.started ||
+      this.view.initialized ||
+      (!this.view.cached && !this.view.serverState)
+    )
+      return;
     h.applyInit(encodeMsg(Y.encodeStateAsUpdate(this.doc)));
     h.setEditable(this.editable);
     const others = [...this.awareness.getStates().keys()];
-    if (others.length) h.applyAwareness(encodeMsg(encodeAwarenessUpdate(this.awareness, others)));
+    if (others.length)
+      h.applyAwareness(
+        encodeMsg(encodeAwarenessUpdate(this.awareness, others)),
+      );
     this.set({ initialized: true });
   }
 
@@ -132,12 +173,28 @@ export class DocSession {
   }
 
   private onDocUpdate = (update: Uint8Array, origin: unknown) => {
-    if (origin !== WEBVIEW && this.view.initialized) this.handle?.applyRemote(encodeMsg(update));
+    if (origin !== WEBVIEW && this.view.initialized)
+      this.handle?.applyRemote(encodeMsg(update));
   };
 
-  private onAwarenessUpdate = ({ added, updated, removed }: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
+  private onAwarenessUpdate = (
+    {
+      added,
+      updated,
+      removed,
+    }: { added: number[]; updated: number[]; removed: number[] },
+    origin: unknown,
+  ) => {
     if (origin === WEBVIEW || !this.view.initialized) return;
-    this.handle?.applyAwareness(encodeMsg(encodeAwarenessUpdate(this.awareness, [...added, ...updated, ...removed])));
+    this.handle?.applyAwareness(
+      encodeMsg(
+        encodeAwarenessUpdate(this.awareness, [
+          ...added,
+          ...updated,
+          ...removed,
+        ]),
+      ),
+    );
   };
 
   destroy() {
@@ -148,12 +205,21 @@ export class DocSession {
     this.provider.destroy();
     this.awareness.destroy();
     // Pending SQLite appends still hold the updates; let them finish before freeing the doc.
-    void this.provider.flushLocal().finally(() => this.doc.destroy());
+    void this.provider.flushLocal().finally(() => {
+      this.unpin?.();
+      this.unpin = null;
+      this.doc.destroy();
+    });
   }
 }
 
 /** One DocSession per mounted page screen, wired to app lifecycle and network changes. */
-export function useDocSession(sql: Sql, pageId: string, workspaceId: string | null, title: string) {
+export function useDocSession(
+  sql: Sql,
+  pageId: string,
+  workspaceId: string | null,
+  title: string,
+) {
   const [session, setSession] = useState<DocSession | null>(null);
   useEffect(() => {
     if (!workspaceId) return;
@@ -164,7 +230,12 @@ export function useDocSession(sql: Sql, pageId: string, workspaceId: string | nu
       if (state === "active") s.provider.reconnectNow();
       else if (state === "background") void s.provider.flushLocal();
     });
-    const net = addNetworkStateListener((n) => n.isConnected && n.isInternetReachable !== false && s.provider.reconnectNow());
+    const net = addNetworkStateListener(
+      (n) =>
+        n.isConnected &&
+        n.isInternetReachable !== false &&
+        s.provider.reconnectNow(),
+    );
     return () => {
       app.remove();
       net.remove();
@@ -177,7 +248,14 @@ export function useDocSession(sql: Sql, pageId: string, workspaceId: string | nu
 }
 
 const EMPTY: DocView = {
-  sync: { phase: "loading", connected: false, pendingLocal: false, revision: null, readOnly: false, failure: null },
+  sync: {
+    phase: "loading",
+    connected: false,
+    pendingLocal: false,
+    revision: null,
+    readOnly: false,
+    failure: null,
+  },
   cached: false,
   serverState: false,
   initialized: false,
@@ -186,5 +264,8 @@ const EMPTY: DocView = {
 const noop = () => () => {};
 
 export function useDocView(session: DocSession | null): DocView {
-  return useSyncExternalStore(session?.subscribe ?? noop, session?.getView ?? (() => EMPTY));
+  return useSyncExternalStore(
+    session?.subscribe ?? noop,
+    session?.getView ?? (() => EMPTY),
+  );
 }

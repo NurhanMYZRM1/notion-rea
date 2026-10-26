@@ -5,6 +5,8 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "dev": "pnpm --filter server dev",
+    "desktop": "pnpm --filter desktop dev",
+    "desktop:build": "pnpm --filter desktop bundle",
     "build": "pnpm -r --filter=!mobile build",
     "typecheck": "pnpm -r typecheck",
     "lint": "oxlint --deny-warnings apps packages",

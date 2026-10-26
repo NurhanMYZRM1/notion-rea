@@ -28,7 +28,7 @@ test("viewers get a read-only page and database with no mutating controls", asyn
   await expect(v.getByRole("button", { name: "New page" })).toHaveCount(0);
   await expect(v.getByRole("button", { name: "More ways to add" })).toHaveCount(0);
   await v.getByRole("button", { name: "Page actions" }).click();
-  await expect(v.getByRole("menuitem")).toHaveText(["Export Markdown"]);
+  await expect(v.getByRole("menuitem")).toHaveText(["Show this page in Graph", "Export Markdown"]);
   await v.keyboard.press("Escape");
   await v.getByRole("button", { name: "Comments" }).click();
   await expect(v.getByRole("complementary", { name: "Comments" })).toBeVisible();

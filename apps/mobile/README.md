@@ -1,6 +1,6 @@
 # Workspace mobile (iOS + Android)
 
-Expo SDK 58 / React Native 0.88 / Expo Router. Every screen is native (native stack, system colors,
+Expo SDK 58 / React Native 0.88 / Expo Router. Every screen is native (native stack, shared neutral light/dark/system palettes,
 Dynamic Type, ≥44 pt controls) except the page body, which is the shared `@workspace/editor` running in
 exactly one DOM component (`components/editor-dom.tsx`, bundled into the app, works offline).
 
@@ -11,14 +11,14 @@ exactly one DOM component (`components/editor-dom.tsx`, bundled into the app, wo
 | Auth: Better Auth Expo client (`expoClient`, scheme `workspace`, SecureStore). Google via system browser, Sign in with Apple (iOS), test login (dev only) — each shown only if `GET /api/providers` says so | `lib/api.ts`, `app/sign-in.tsx` |
 | API calls: `@workspace/core` client with `{ Cookie: authClient.getCookie() }`; the OS cookie jar is never used | `lib/api.ts` |
 | Session + per-account SQLite DB (`ws-<userId>.db`), metadata cache with offline fallback | `lib/session.tsx` |
-| Documents: native `Y.Doc` + `SyncProvider` + SQLite `DocStore` (append resolves after commit; counters persisted; merge >100 rows; LRU 20 docs / 50 MB, never evicts unsynced docs) | `lib/doc-store.ts`, `lib/doc-session.ts` |
-| Editor bridge (typed, versioned `v:1`): WebView→native `onBridgeReady`, `onReady`, `onLocalUpdate`, `onAwareness`, `onOpenLink`, `onError`, `pickAndUpload`, `resolveSrc`, `openFile`; native→WebView `applyInit`, `applyRemote`, `applyAwareness`, `setEditable`. Only incremental Yjs/awareness updates cross it; no cookies or tokens | `lib/bridge.ts`, `components/doc-editor.tsx`, `components/editor-dom.tsx` |
+| Documents: native `Y.Doc` + `SyncProvider` + SQLite `DocStore` (append resolves after commit; counters persisted; merge >100 rows; LRU 20 docs / 50 MB, never evicts mounted or unsynced docs) | `lib/doc-store.ts`, `lib/doc-session.ts` |
+| Editor bridge (typed, versioned `v:2`): WebView→native `onBridgeReady`, `onReady`, `onLocalUpdate`, `onAwareness`, `onOpenLink`, `onError`, `pickAndUpload`, `resolveSrc`, `openFile`; native→WebView `applyInit`, `applyRemote`, `applyAwareness`, `setEditable`, `refreshPageMetadata`, `setTheme`. Typed child-page resolve/create/open/archive/move actions stay on native. Only incremental Yjs/awareness updates cross it; no cookies or tokens | `lib/bridge.ts`, `components/doc-editor.tsx`, `components/editor-dom.tsx` |
 | Attachments: native picker, images >2048 px downscaled, `api.upload`; downloads with the cookie into the cache dir, the WebView gets a local URI | `lib/attachments.ts` |
 | Workspace events WebSocket (Cookie header) → same query keys as web; full refetch after reconnect | `lib/events.ts`, `lib/queries.ts` |
 | Invite links `workspace://invite/<token>` and `https://<host>/invite#<token>` | `app/+native-intent.tsx`, `app/invite/[token].tsx` |
 
 Screens: `app/index.tsx` (home: workspace switcher, Search, Favorites, Recents, lazy page tree),
-`search.tsx`, `page/[id]/index.tsx` (pages and database records), `page/[id]/comments.tsx`,
+`search.tsx`, `graph.tsx` (lazy hierarchy SVG map and accessible tree), `page/[id]/index.tsx` (pages and database records), `page/[id]/comments.tsx`,
 `database/[id].tsx` (table/board, filter, sort, add row), `trash.tsx`, `settings.tsx`, `invite/[token].tsx`.
 
 The WebView is `react-native-webview` (`dom.useExpoDOMWebView: false`) because it is the engine with a
@@ -124,11 +124,37 @@ Server side for native sign-in: `trustedOrigins` already includes `workspace://`
 
 ## Known limits
 
-- Image/file insertion from the editor toolbar does nothing until `packages/editor/src/Editor.tsx` is fixed:
-  `CollaborationCaret` gets `provider: { awareness }` without `on/off`, so Tiptap UniqueID's `onCreate` throws and the
-  editor's own `onCreate` (which sets the ref `pick()` needs) never runs. The native `pickAndUpload` path is in place.
-
-- Android has not been built or run (no Android SDK on the build machine); the config and code paths are cross-platform.
+- Development builds were compiled and exercised on an iPhone 17 Pro Simulator and Android API 36 emulator.
+  Physical-device and store distribution checks remain separate.
 - Title, favorites, comments, database and member changes need a connection (they are revision-checked REST calls);
   only document bodies are editable offline.
 - In debug builds the editor is served by Metro, so images reach the WebView as `data:` URIs; release builds use cached `file://` URIs.
+
+Android's pinned `react-native-webview` patch installs Expo's initial object with AndroidX document-start
+injection. The upstream asynchronous injection can race the editor's first inline script on cold loads.
+The patch affects Android only, retains the navigation policy and keeps credentials on the native side.
+
+## Hierarchy and subpage delivery
+
+The native editor owns the authenticated API and document session. DOM local-update acknowledgements
+are drained before `awaitSynced()` and anchored child creation. The server inserts the canonical
+`childPage` node. Client-generated IDs are stored in account SQLite until the request succeeds, so
+retrying a lost response does not create a second page. Archive offers a navigation-independent Undo.
+The bridge and document schema are version 2; older document formats surface an update-required banner.
+
+Graph loads 100 metadata entries per branch, expands records under their databases, caches each
+branch per account, and requests ancestor paths for search focus. It never loads document bodies.
+The tree alternative exposes full titles, expansion and node actions to assistive technology.
+
+Appearance is saved per account in Settings → Theme. All mounted editor sessions are pinned until
+SQLite flush completes, including parent pages retained by the native navigation stack.
+
+Local simulator API origins: iOS `http://localhost:5173`; Android `http://localhost:5173` with `adb reverse tcp:5173 tcp:5173`.
+Production EAS origins remain unchanged.
+
+Local native build helpers: `bash scripts/build-local-ios.sh` and
+`bash scripts/build-local-android.sh`. The iOS helper compiles matching React Native and Hermes
+sources to work around SDK 58 prebuilt ABI mismatches; it needs CMake and Ninja (`brew install cmake ninja`).
+Run Metro separately with `EXPO_PUBLIC_API_URL=http://localhost:5173 pnpm start --dev-client --localhost --port 8081`
+for iOS, or `EXPO_PUBLIC_API_URL=http://localhost:5173 pnpm start --dev-client --lan --port 8082`
+for Android. Android's development client uses `adb reverse tcp:5173 tcp:5173` for the API and `adb reverse tcp:8082 tcp:8082` for Metro. This preserves the local server's WebSocket origin check.
