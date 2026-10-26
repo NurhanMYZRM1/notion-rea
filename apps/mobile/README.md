@@ -74,8 +74,8 @@ Server side for native sign-in: `trustedOrigins` already includes `workspace://`
 | Profile | Use |
 |---|---|
 | `development` | dev client, internal distribution, iOS simulator build, API `http://localhost:8787` |
-| `preview` | internal distribution (Android APK), staging API — replace `REPLACE-staging.example.com` |
-| `production` | store builds (AAB / IPA), `autoIncrement`, production API — replace `REPLACE.example.com` |
+| `preview` | internal distribution (Android APK), staging API (`https://workspace-staging.paragonxplays.workers.dev`) |
+| `production` | store builds (AAB / IPA), `autoIncrement`, production API (`https://workspace.paragonxplays.workers.dev`) |
 
 `submit.production` holds placeholders (`appleId`, `ascAppId`, `appleTeamId`, Play service-account key path,
 `track: internal`, `releaseStatus: draft`). Build/submit: `eas build -p ios|android --profile production`,

@@ -50,7 +50,7 @@ environment) creates, in the first workspace of that account:
 | Scroll dropped frames (30 s) | < 5 % | pending | pending | pending | |
 | LCP | ≤ 2.5 s | n/a | n/a | pending | |
 | CLS | ≤ 0.1 | n/a | n/a | pending | |
-| Initial shell JS (gzip) | ≤ 250 KiB | n/a | n/a | pending | from `vite build` |
+| Initial shell JS (gzip) | ≤ 250 KiB | n/a | n/a | **105.8 KiB — pass** | `vite build` 2026-10-26; editor chunk 177.3 KiB, Yjs 40.3 KiB, database 41.6 KiB load lazily |
 | 20 open/edit/back cycles | no crash, no unbounded growth | pending | pending | pending | |
 
 ## Server-side (local workerd, not production)
@@ -60,3 +60,8 @@ environment) creates, in the first workspace of that account:
 | `POST /api/databases/:id/query` 10k rows, limit 50, no filter | 9 ms |
 | same, select filter + numeric sort desc | 11 ms |
 | Page through all 10,000 rows (limit 200) | 10,000 rows returned over 50 requests, 3 s total (uniqueness checked in server tests) |
+
+## Simulator only (not the device gate)
+
+iPhone 17 Pro simulator, iOS 26.5, Release build, local backend (2026-10-26): cold launch to app shell
+≈ 575 ms (577/574/571), cached page open-to-editable 675 ms (1 run). Recorded for regression tracking only.

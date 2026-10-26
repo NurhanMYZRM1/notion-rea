@@ -22,7 +22,7 @@
       "extends": "base",
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://REPLACE-staging.example.com"
+        "EXPO_PUBLIC_API_URL": "https://workspace-staging.paragonxplays.workers.dev"
       },
       "android": {
         "buildType": "apk"
@@ -32,7 +32,7 @@
       "extends": "base",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://REPLACE.example.com"
+        "EXPO_PUBLIC_API_URL": "https://workspace.paragonxplays.workers.dev"
       },
       "android": {
         "buildType": "app-bundle"
