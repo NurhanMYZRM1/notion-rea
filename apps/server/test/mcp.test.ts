@@ -45,6 +45,8 @@ async function authorize(user: TestUser, workspaceId: string, extraScopes: strin
   const clientId = await register();
   const start = await beginAuthorize(user, clientId, requested);
   expect(start.res.status).toBe(200);
+  // Browsers apply form-action to the post-consent redirect; without the client's origin the loopback redirect is blocked.
+  expect(start.res.headers.get("Content-Security-Policy")).toContain(`form-action 'self' ${new URL(REDIRECT).origin};`);
   const res = await decide(start.cookie, start.handle, { workspace: workspaceId, scope: extraScopes, decision: "approve" });
   expect(res.status).toBe(302);
   const location = new URL(res.headers.get("Location")!);

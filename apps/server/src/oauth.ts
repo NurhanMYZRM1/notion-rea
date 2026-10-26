@@ -15,9 +15,15 @@ const SCOPE_TEXT: Record<string, string> = {
   "workspace:archive": "Move pages to the trash and restore them",
 };
 
-function page(title: string, body: string, headers = new Headers(), status = 200): Response {
+/** CSP source for a client's redirect URI; browsers apply form-action to the redirect after the consent POST. */
+function redirectSource(redirectUri: string): string {
+  const url = new URL(redirectUri);
+  return url.origin === "null" ? url.protocol : url.origin;
+}
+
+function page(title: string, body: string, headers = new Headers(), status = 200, formTarget?: string): Response {
   headers.set("Content-Type", "text/html; charset=utf-8");
-  headers.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
+  headers.set("Content-Security-Policy", `default-src 'none'; style-src 'unsafe-inline'; form-action 'self'${formTarget ? ` ${formTarget}` : ""}; frame-ancestors 'none'; base-uri 'none'`);
   headers.set("X-Frame-Options", "DENY");
   headers.set("Cache-Control", "no-store");
   headers.set("Referrer-Policy", "no-referrer");
@@ -92,7 +98,7 @@ export async function handleAuthorize(request: Request, env: OAuthEnv, auth: Aut
       }
       const details = await oauth.describeConsent(authRequest);
       const consent = await oauth.beginConsent(authRequest);
-      return page(`Authorize ${details.clientName}`, consentHtml(details, consent.handle, workspaces), consent.headers);
+      return page(`Authorize ${details.clientName}`, consentHtml(details, consent.handle, workspaces), consent.headers, 200, redirectSource(authRequest.redirectUri));
     }
     if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
