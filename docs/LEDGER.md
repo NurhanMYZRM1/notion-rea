@@ -30,7 +30,7 @@ Resume here. Plan: [plans/workspace-blueprint.md](../plans/workspace-blueprint.m
 | S4 MCP + OAuth | done; Codex deployed tool calls pending | `test/mcp.test.ts` 8/8; local Codex + Claude Code verified 2026-10-26; production 2026-10-27: Claude Code login + create/read, Codex login only (usage limit) (docs/MCP.md). CIMD opt-in; pre-dispatch per-tool scope step-up |
 | S5 databases/search/portability | done | server tests + web database spec; CSV/Markdown import/export |
 | S6 native app | done on iOS simulator | tsc clean, 12 node tests; Debug + Release on iPhone 17 Pro sim: sign-in, invites, editing, offline force-quit/relaunch, resync. Not verified: Android, devices, Maestro, uploads, non-ASCII paste |
-| S7 hardening/deploy | deployed | staging `https://workspace-staging.paragonxplays.workers.dev` (version fff36d35), production `https://workspace.paragonxplays.workers.dev` (version 05ac97e5, consent CSP fix); smoke checks pass; restore drill ok; owner signed in with Google on production |
+| S7 hardening/deploy | deployed | staging `https://workspace-staging.paragonxplays.workers.dev` (version eed9c3cb), production `https://workspace.paragonxplays.workers.dev` (version aee8224a, consent CSP fix); smoke checks pass; restore drill ok; owner signed in with Google on production |
 
 ## Plan changes
 
