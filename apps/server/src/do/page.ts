@@ -235,13 +235,29 @@ export class PageDocument extends DurableObject<Env> {
       ws.send(encodeControl({ type: "read-only", reason: meta.role === "viewer" ? "viewer" : "archived" }));
       return; // not applied, not acknowledged: the client keeps it as an unsynchronized draft
     }
-    if (!preservesOwningReferences(this.load(), update)) {
-      this.endSocket(ws, { type: "error", message: "Use page actions to create, move, or trash subpages" }, 1008);
-      return;
-    }
+    // Never reject a client update over subpage links: a stale offline reorder would then fail on every
+    // reconnect. Commit it, and if links changed, rebuild them from D1 (the authority).
+    const links = owningReferences(this.load()).join();
     const result = this.commit(update, "ws");
     ws.send(encodeAck(result?.revision ?? this.revision));
     if (result && result.effective.length) this.broadcastUpdate(result.effective, ws);
+    if (result && owningReferences(this.load()).join() !== links) await this.repairLinks();
+  }
+
+  private async repairLinks(): Promise<void> {
+    const pageId = this.meta<string>("page_id");
+    const workspaceId = this.meta<string>("workspace_id");
+    if (!pageId || !workspaceId) return;
+    try {
+      await this.reconcileChildPages(pageId, workspaceId);
+    } catch (err) {
+      // Leave it to the outbox: the next read, edit or minute cron reconciles this parent.
+      log("link_repair_deferred", { pageId, error: String(err).slice(0, 200) });
+      await this.env.DB.prepare(
+        `INSERT INTO page_reference_outbox(parent_id, workspace_id, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(parent_id) DO UPDATE SET version = version + 1, updated_at = excluded.updated_at`,
+      ).bind(pageId, workspaceId, Date.now()).run().catch(() => {});
+    }
   }
 
   /** Re-read membership/page state at most every RECHECK_MS; close the socket if access is gone. */
@@ -395,7 +411,17 @@ export class PageDocument extends DurableObject<Env> {
 
   /** Rebuild only owning links from current D1 metadata. Old outbox jobs cannot resurrect pages. */
   async reconcileChildPages(parentId: string, workspaceId: string): Promise<{ revision: number; changed: boolean }> {
-    return this.ctx.blockConcurrencyWhile(async () => {
+    // Serialized so a later run always reads newer D1 rows. Not blockConcurrencyWhile: a throw there
+    // (e.g. a transient D1 error) resets the object and drops every open editor.
+    const run = this.reconciling.then(() => this.reconcileNow(parentId, workspaceId));
+    this.reconciling = run.catch(() => {});
+    return run;
+  }
+
+  private reconciling: Promise<unknown> = Promise.resolve();
+
+  private async reconcileNow(parentId: string, workspaceId: string): Promise<{ revision: number; changed: boolean }> {
+    {
       const parent = await this.env.DB.prepare("SELECT state, is_database, archive_root FROM pages WHERE id = ? AND workspace_id = ?")
         .bind(parentId, workspaceId).first<{ state: string; is_database: number; archive_root: string | null }>();
       if (!parent || parent.state === "deleted" || parent.is_database) return { revision: this.revision, changed: false };
@@ -456,7 +482,7 @@ export class PageDocument extends DurableObject<Env> {
         this.broadcastUpdate(result.effective);
       }
       return { revision: result?.revision ?? this.revision, changed: !!result };
-    });
+    }
   }
 
   async setState(pageId: string, state: "active" | "archived"): Promise<void> {
@@ -501,11 +527,15 @@ export class PageDocument extends DurableObject<Env> {
 /** Include identity and multiplicity: generic edits cannot forge, copy, or remove owning links. */
 function owningReferences(doc: Y.Doc): string[] {
   const refs: string[] = [];
-  const walk = (node: PMNode) => {
-    if (node.type === "childPage") refs.push(JSON.stringify([node.attrs?.id, node.attrs?.pageId]));
-    node.content?.forEach(walk);
+  // Walks Y elements only (no text conversion): this runs on every editor update.
+  const walk = (parent: Y.XmlFragment | Y.XmlElement) => {
+    for (const child of parent.toArray()) {
+      if (!(child instanceof Y.XmlElement)) continue;
+      if (child.nodeName === "childPage") refs.push(JSON.stringify([child.getAttribute("id"), child.getAttribute("pageId")]));
+      else walk(child);
+    }
   };
-  walk(yToJSON(doc.getXmlFragment(FRAGMENT)));
+  walk(doc.getXmlFragment(FRAGMENT));
   return refs.sort();
 }
 

@@ -1,12 +1,13 @@
 import { env, SELF } from "cloudflare:test";
-import type { PMNode } from "@workspace/core";
+import { elementToJSON, FRAGMENT, jsonToY, type PMNode } from "@workspace/core";
+import { SyncProvider } from "@workspace/core/sync";
 import * as encoding from "lib0/encoding";
 import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
 import { describe, expect, it } from "vitest";
 import { processPageReferences } from "../src/domain/page-references";
 import { archivePage, createPage, movePage } from "../src/domain/pages";
-import { addMember, api, BASE, createWorkspace, newDatabase, newPage, signUp, socketOutcome, until } from "./helpers";
+import { addMember, api, BASE, createWorkspace, memoryStore, newDatabase, newPage, signUp, socketOutcome, until } from "./helpers";
 
 const stub = (id: string) => env.PAGE.get(env.PAGE.idFromName(id));
 const read = async (id: string): Promise<{ doc: PMNode; revision: number }> => stub(id).read(id);
@@ -263,7 +264,7 @@ describe("hierarchy and owning subpages", () => {
     expect(await env.DB.prepare("SELECT 1 FROM page_reference_outbox WHERE workspace_id = ?").bind(ws).first()).toBeNull();
   });
 
-  it("disconnects a mounted legacy reader before adding owning nodes and rejects forged socket deletion", async () => {
+  it("disconnects a mounted legacy reader before adding owning nodes and repairs a socket deletion of a link", async () => {
     const { owner, ws } = await setup();
     const parent = await newPage(owner, ws);
     const old = await socketOutcome(owner, `/sync/${parent.id}`, 50);
@@ -284,10 +285,55 @@ describe("hierarchy and owning subpages", () => {
     let close = 0;
     modern.ws!.addEventListener("close", (event) => { close = event.code; });
     modern.ws!.send(encoding.toUint8Array(encoder));
-    await until(() => close === 1008, "invalid owning block update rejected");
-    expect(await refs(parent.id)).toHaveLength(1);
-    expect((await read(parent.id)).revision).toBe(state.revision);
+    // Accepted, then rebuilt from D1: the link comes back and the session stays usable.
+    await until(async () => (await read(parent.id)).revision > state.revision && (await refs(parent.id)).length === 1, "link repaired");
+    expect(close).toBe(0);
     scratch.destroy();
+  });
+
+  it("keeps syncing after an offline reorder of a link whose subpage was trashed meanwhile", async () => {
+    const { owner, ws } = await setup();
+    const editor = await signUp();
+    await addMember(ws, editor, "editor");
+    const parent = await newPage(owner, ws);
+    await api(owner, "POST", `/api/pages/${parent.id}/edit`, { ops: [{ op: "insert", at: { position: "end" }, content: { markdown: "first para" } }] });
+    await api(owner, "POST", `/api/pages/${parent.id}/subpages`, { id: "pg_reorderedchild0001", title: "Child" });
+    const connect = async () => {
+      const res = await SELF.fetch(`${BASE}/sync/${parent.id}?schema=2`, { headers: { Upgrade: "websocket", Cookie: editor.cookie, Origin: BASE } });
+      res.webSocket!.accept();
+      return res.webSocket!;
+    };
+    const doc = new Y.Doc();
+    const store = memoryStore();
+    let provider = new SyncProvider({ doc, store, connect, batchMs: 5 });
+    await provider.start();
+    const frag = doc.getXmlFragment(FRAGMENT);
+    const linkIndex = () => frag.toArray().findIndex((e) => e instanceof Y.XmlElement && e.nodeName === "childPage");
+    await until(() => provider.current.phase === "synced" && linkIndex() >= 0, "link synced");
+    provider.destroy();
+    // Someone else trashes the subpage while this device is offline; the server removes the link.
+    expect((await api(owner, "POST", "/api/pages/pg_reorderedchild0001/archive")).status).toBe(200);
+    // Offline: drag the (now stale) link to the top, then keep typing. The editor allows reordering links.
+    provider = new SyncProvider({ doc, store, connect: () => Promise.reject(new Error("offline")), batchMs: 5 });
+    await provider.start();
+    const link = elementToJSON(frag.get(linkIndex()) as Y.XmlElement);
+    doc.transact(() => {
+      frag.delete(linkIndex(), 1);
+      frag.insert(0, [jsonToY(link)]);
+    });
+    frag.insert(frag.length, [jsonToY({ type: "paragraph", content: [{ type: "text", text: "typed offline" }] })]);
+    await provider.flushLocal();
+    provider.destroy();
+    provider = new SyncProvider({ doc, store, connect, batchMs: 5 });
+    await provider.start();
+    await until(() => provider.current.phase === "synced" || provider.current.phase === "failed", "reconnect settles", 8000);
+    expect(provider.current.failure).toBeNull();
+    expect(provider.current.pendingLocal).toBe(false);
+    const server = await read(parent.id);
+    expect(JSON.stringify(server.doc)).toContain("typed offline");
+    expect(await refs(parent.id)).toHaveLength(0); // the server stays authoritative: the trashed page's link is gone
+    await until(() => linkIndex() < 0, "repair reaches the device");
+    provider.destroy();
   });
 
   it("bounds a ten-thousand-record hierarchy without reading or creating record documents", async () => {
