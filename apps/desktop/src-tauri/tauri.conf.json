@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Workspace",
+  "version": "0.2.0",
+  "identifier": "com.workspace.desktop",
+  "build": {
+    "frontendDist": "../launcher"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Workspace",
+        "create": false,
+        "width": 1280,
+        "height": 840,
+        "minWidth": 800,
+        "minHeight": 560,
+        "center": true
+      }
+    ],
+    "security": {
+      "capabilities": [],
+      "csp": "default-src 'self'; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "category": "Productivity",
+    "shortDescription": "Documents, tasks, and a shared workspace",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
+  }
+}

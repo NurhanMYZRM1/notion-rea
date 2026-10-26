@@ -1,0 +1,72 @@
+# Local Android API36 smoke: native navigation, hierarchy tree, search focus and theme preference.
+# Requires the dev client connected to Metro8082 and demo account already seeded on localhost5173.
+appId: com.workspace.app
+env:
+  TEST_EMAIL: demo@example.com
+  TEST_PASSWORD: WorkspaceDemo123!
+---
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+- runFlow:
+    when:
+      visible: "Close"
+    commands:
+      - tapOn: "Close"
+- runFlow:
+    when:
+      visible:
+        id: "test-email"
+    commands:
+      - tapOn:
+          id: "test-email"
+      - inputText: ${TEST_EMAIL}
+      - tapOn:
+          id: "test-password"
+      - inputText: ${TEST_PASSWORD}
+      - hideKeyboard
+      - tapOn:
+          id: "test-sign-in"
+- extendedWaitUntil:
+    visible: "Graph"
+    timeout: 30000
+- tapOn: "Settings & members"
+- tapOn: "Theme.*"
+- tapOn: "Light"
+- back
+- tapOn: "Graph"
+- extendedWaitUntil:
+    visible: "Accessible tree"
+    timeout: 30000
+- tapOn: "Accessible tree"
+- extendedWaitUntil:
+    visible: "Show map"
+    timeout: 15000
+- takeScreenshot: android-hierarchy-tree-light
+- tapOn: "Show map"
+- tapOn: "Fit to view"
+- takeScreenshot: android-hierarchy-map-light
+- back
+- tapOn: "Settings & members"
+- tapOn: "Theme.*"
+- tapOn: "Dark"
+- back
+- tapOn: "Graph"
+- extendedWaitUntil:
+    visible: "Accessible tree"
+    timeout: 30000
+- takeScreenshot: android-hierarchy-map-dark
+- tapOn:
+    text: "Search and focus a page"
+- inputText: "Start here"
+- extendedWaitUntil:
+    visible: "Start here"
+    timeout: 15000
+- tapOn: "Focus Start here in Graph"
+- assertVisible: "Fit to view"
+- back
+- tapOn: "Settings & members"
+- tapOn: "Theme.*"
+- tapOn: "System"

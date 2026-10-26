@@ -8,17 +8,45 @@ import { inviteTokenFrom } from "@/lib/links";
 import { pendingInvite, useSession } from "@/lib/session";
 import { useSignOut } from "@/lib/sign-out";
 
-type Failure = { title: string; body: string; switchAccount?: boolean; retry?: boolean };
+type Failure = {
+  title: string;
+  body: string;
+  switchAccount?: boolean;
+  retry?: boolean;
+};
 
 function describe(err: unknown): Failure {
   if (err instanceof ApiRequestError) {
-    if (err.code === "network") return { title: "You're offline", body: "Connect to the internet to accept this invitation.", retry: true };
-    if (err.code === "forbidden") return { title: "Wrong account", body: err.message, switchAccount: true };
-    if (err.code === "gone") return { title: "Invitation can't be used", body: `${err.message}. Ask the person who invited you for a new link.` };
-    if (err.code === "not_found" || err.code === "invalid_input") return { title: "Invitation not found", body: "This link is invalid. Check that you opened the whole link, or ask for a new one." };
-    if (err.code === "unauthenticated") return { title: "Sign in again", body: "Your session expired.", switchAccount: true };
+    if (err.code === "network")
+      return {
+        title: "You're offline",
+        body: "Connect to the internet to accept this invitation.",
+        retry: true,
+      };
+    if (err.code === "forbidden")
+      return { title: "Wrong account", body: err.message, switchAccount: true };
+    if (err.code === "gone")
+      return {
+        title: "Invitation can't be used",
+        body: `${err.message}. Ask the person who invited you for a new link.`,
+      };
+    if (err.code === "not_found" || err.code === "invalid_input")
+      return {
+        title: "Invitation not found",
+        body: "This link is invalid. Check that you opened the whole link, or ask for a new one.",
+      };
+    if (err.code === "unauthenticated")
+      return {
+        title: "Sign in again",
+        body: "Your session expired.",
+        switchAccount: true,
+      };
   }
-  return { title: "Couldn't accept the invitation", body: errorMessage(err), retry: true };
+  return {
+    title: "Couldn't accept the invitation",
+    body: errorMessage(err),
+    retry: true,
+  };
 }
 
 /** `workspace://invite/<token>` and `https://<host>/invite#<token>` (rewritten in +native-intent) land here. */
@@ -36,14 +64,24 @@ export default function Invite() {
     if (token) void pendingInvite.set(token);
   }, [token]);
 
-  if (!token) return <Message title="Invitation not found" body="This link is invalid." />;
+  if (!token)
+    return (
+      <Message title="Invitation not found" body="This link is invalid." />
+    );
 
   if (status !== "ready")
     return (
       <>
         <Stack.Screen options={{ title: "Invitation" }} />
-        <Message title="You've been invited" body="Sign in with the email address the invitation was sent to, and it will be accepted next.">
-          <Button testID="invite-sign-in" title="Sign in to continue" onPress={() => router.replace("/sign-in")} />
+        <Message
+          title="You've been invited"
+          body="Sign in with the email address the invitation was sent to, and it will be accepted next."
+        >
+          <Button
+            testID="invite-sign-in"
+            title="Sign in to continue"
+            onPress={() => router.replace("/sign-in")}
+          />
         </Message>
       </>
     );
@@ -74,8 +112,15 @@ export default function Invite() {
   if (failure)
     return (
       <Message title={failure.title} body={failure.body}>
-        {failure.retry && <Button title="Try again" busy={busy} onPress={() => void accept()} />}
-        {failure.switchAccount && <Button title="Sign out and switch account" onPress={() => void switchAccount()} />}
+        {failure.retry && (
+          <Button title="Try again" busy={busy} onPress={() => void accept()} />
+        )}
+        {failure.switchAccount && (
+          <Button
+            title="Sign out and switch account"
+            onPress={() => void switchAccount()}
+          />
+        )}
         <Button
           kind="plain"
           title="Not now"
@@ -88,8 +133,16 @@ export default function Invite() {
     );
 
   return (
-    <Message title="Join workspace" body={`Accept this invitation as ${account?.user.email ?? "your account"}? You'll get access to the workspace's pages.`}>
-      <Button testID="accept-invite" title="Accept invitation" busy={busy} onPress={() => void accept()} />
+    <Message
+      title="Join workspace"
+      body={`Accept this invitation as ${account?.user.email ?? "your account"}? You'll get access to the workspace's pages.`}
+    >
+      <Button
+        testID="accept-invite"
+        title="Accept invitation"
+        busy={busy}
+        onPress={() => void accept()}
+      />
       <Button
         kind="plain"
         title="Not now"

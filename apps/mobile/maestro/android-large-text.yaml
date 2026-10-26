@@ -1,0 +1,14 @@
+# Harness sets font_scale to 1.5 and cold-starts the dev client; restore the prior value afterward.
+appId: com.workspace.app
+---
+- extendedWaitUntil:
+    visible: "Graph"
+    timeout: 30000
+- tapOn: "Graph"
+- extendedWaitUntil:
+    visible: "Accessible tree"
+    timeout: 30000
+- tapOn: "Accessible tree"
+- assertVisible: "Show map"
+- assertVisible: ".*Start here.*"
+- takeScreenshot: android-hierarchy-large-text

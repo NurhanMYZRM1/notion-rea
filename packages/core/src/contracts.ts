@@ -35,6 +35,29 @@ export interface PageDetail extends PageSummary {
   favorite: boolean;
 }
 
+/** Lightweight graph metadata; database records are included without loading document bodies. */
+export interface HierarchyNode extends PageSummary {
+  kind: "page" | "database" | "record";
+}
+
+export interface HierarchyResult {
+  nodes: HierarchyNode[];
+  nextCursor: string | null;
+  /** Root-to-focus path, including the focused page. */
+  path: HierarchyNode[];
+}
+
+export const CreateSubpageInput = z.object({
+  id,
+  title: title.default(""),
+  afterBlockId: z.string().min(1).max(64).optional(),
+});
+
+export const ArchivePageInput = z.object({
+  /** An owning block may only archive the page while it still belongs to this parent. */
+  expectedParentId: id.nullable().optional(),
+});
+
 export const CreatePageInput = z.object({
   parentId: id.nullable().default(null),
   title: title.default(""),

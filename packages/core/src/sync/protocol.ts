@@ -15,6 +15,8 @@ export const MSG_ACK = 2;
 export const MSG_CONTROL = 3;
 
 export const PROTOCOL_VERSION = 1;
+/** Readers must understand this schema before opening a document for editing. */
+export const DOCUMENT_SCHEMA_VERSION = 2;
 
 export type Control =
   | { type: "hello"; revision: number; role: "owner" | "editor" | "viewer"; state: "active" | "archived"; v: number }
@@ -22,6 +24,7 @@ export type Control =
   | { type: "state"; state: "active" | "archived" }
   | { type: "revoked" }
   | { type: "deleted" }
+  | { type: "upgrade-required"; requiredSchemaVersion: number }
   | { type: "error"; message: string };
 
 /** WebSocket close codes used when the server ends a document session. */
@@ -30,6 +33,7 @@ export const CLOSE = {
   forbidden: 4403,
   notFound: 4404,
   deleted: 4410,
+  upgradeRequired: 4412,
   tooLarge: 4413,
 } as const;
 

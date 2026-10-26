@@ -8,6 +8,7 @@ import { api } from "./api";
  */
 export const qk = {
   me: ["workspaces"] as const,
+  hierarchy: (ws: string, parentId: string | null) => ["hierarchy", ws, parentId] as const,
   grants: ["workspaces", "agent-grants"] as const,
   children: (ws: string, parentId: string | null) => ["pages", parentId, ws] as const,
   page: (id: string) => ["page", id] as const,
@@ -34,6 +35,7 @@ export const usePage = (id: string) => useQuery({ queryKey: qk.page(id), queryFn
 /** Refresh everything a page change can affect (also arrives via the event channel; this is for immediacy). */
 export function invalidatePage(qc: QueryClient, page: Pick<PageDetail, "id" | "parentId" | "workspaceId" | "databaseId">, extraParents: (string | null)[] = []) {
   void qc.invalidateQueries({ queryKey: qk.page(page.id) });
+  void qc.invalidateQueries({ queryKey: ["hierarchy", page.workspaceId] });
   for (const p of [page.parentId, ...extraParents]) void qc.invalidateQueries({ queryKey: qk.children(page.workspaceId, p) });
   void qc.invalidateQueries({ queryKey: qk.favorites(page.workspaceId) });
   void qc.invalidateQueries({ queryKey: qk.recents(page.workspaceId) });

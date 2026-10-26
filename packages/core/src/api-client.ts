@@ -4,6 +4,7 @@ import type {
   CommentInfo,
   DatabaseInfo,
   Filter,
+  HierarchyResult,
   InvitationInfo,
   MemberInfo,
   PageDetail,
@@ -108,10 +109,14 @@ export function createApiClient(opts: ApiClientOptions) {
       post<{ database: DatabaseInfo; imported: number; rejected: { row: number; reason: string }[]; warnings: string[] }>(`/api/w/${ws}/import/csv`, input),
 
     page: (id: string) => get<{ page: PageDetail }>(`/api/pages/${id}`),
+    hierarchy: (ws: string, options: { parentId?: string | null; cursor?: string | null; limit?: number; focusId?: string } = {}) =>
+      get<HierarchyResult>(`/api/w/${ws}/hierarchy${q({ parentId: options.parentId, cursor: options.cursor, limit: options.limit === undefined ? undefined : String(options.limit), focusId: options.focusId })}`),
+    createSubpage: (parentId: string, input: { id: string; title?: string; afterBlockId?: string }) =>
+      post<{ page: PageSummary; parentRevision: number }>(`/api/pages/${parentId}/subpages`, input),
     updatePage: (id: string, input: { expectedRevision: number; title?: string; icon?: string | null }) => patch<{ page: PageSummary }>(`/api/pages/${id}`, input),
     movePage: (id: string, input: { expectedRevision: number; parentId: string | null; afterId?: string | null }) =>
       post<{ page: PageSummary }>(`/api/pages/${id}/move`, input),
-    archivePage: (id: string) => post<{ page: PageSummary }>(`/api/pages/${id}/archive`),
+    archivePage: (id: string, input?: { expectedParentId?: string | null }) => post<{ page: PageSummary }>(`/api/pages/${id}/archive`, input),
     restorePage: (id: string) => post<{ page: PageSummary }>(`/api/pages/${id}/restore`),
     deletePage: (id: string) => del<{ deleted: number }>(`/api/pages/${id}`),
     setFavorite: (id: string, favorite: boolean) => put<{ ok: true }>(`/api/pages/${id}/favorite`, { favorite }),

@@ -103,6 +103,6 @@ export async function typeInDoc(page: Page, text: string) {
 
 export async function expectNoAxeViolations(page: Page, label: string) {
   const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
-  const found = result.violations.map((v) => `${v.id} [${v.impact}] ${v.help}: ${v.nodes.slice(0, 4).map((n) => n.target.join(" ")).join(" | ")}`);
+  const found = result.violations.map((v) => `${v.id} [${v.impact}] ${v.help}: ${v.nodes.slice(0, 4).map((n) => `${n.target.join(" ")}: ${n.failureSummary}`).join(" | ")}`);
   expect(found, `axe violations on ${label}`).toEqual([]);
 }

@@ -1,0 +1,8 @@
+# Restore `adb reverse tcp:5173 tcp:5173` while the offline draft remains open.
+appId: com.workspace.app
+---
+- extendedWaitUntil:
+    visible: "Sync status: Synced"
+    timeout: 45000
+- assertVisible: ".*retained offline.*"
+- takeScreenshot: android-offline-reconnected-synced

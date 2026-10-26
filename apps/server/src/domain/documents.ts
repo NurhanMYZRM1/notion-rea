@@ -3,9 +3,11 @@ import { AppError } from "../errors";
 import { type Actor, audit, requirePageAccess } from "./access";
 import { type EditOp, needsExpectedRevision, validateDoc } from "./doc-edits";
 import { createPage, page } from "./pages";
+import { processPageReferences } from "./page-references";
 
 export async function readDocument(env: Env, actor: Actor, pageId: string): Promise<{ doc: PMNode; revision: number }> {
-  await requirePageAccess(env, actor, pageId, "read");
+  const access = await requirePageAccess(env, actor, pageId, "read");
+  await processPageReferences(env, { workspaceId: access.workspaceId, parentIds: [pageId] });
   return page(env, pageId).read(pageId);
 }
 
@@ -13,7 +15,21 @@ export async function exportMarkdown(env: Env, actor: Actor, pageId: string): Pr
   const { doc, revision } = await readDocument(env, actor, pageId);
   const title = await env.DB.prepare("SELECT title FROM pages WHERE id = ?").bind(pageId).first<{ title: string }>();
   const report: ConversionReport = { warnings: [] };
-  const body = toMarkdown(doc, report);
+  // Export uses authorized, current metadata even if an earlier projection RPC needs retrying.
+  const children = await env.DB.prepare(`SELECT c.id, c.title, c.icon FROM pages c JOIN pages p ON p.id = ?
+    WHERE c.parent_id = p.id AND c.workspace_id = p.workspace_id AND c.database_id IS NULL
+      AND (c.state = 'active' OR (p.state = 'archived' AND c.state = 'archived' AND c.archive_root IS p.archive_root))`)
+    .bind(pageId).all<{ id: string; title: string; icon: string | null }>();
+  const metadata = new Map(children.results.map((row) => [row.id, row]));
+  const hydrate = (node: PMNode): PMNode | null => {
+    if (node.type === "childPage") {
+      const child = metadata.get(String(node.attrs?.pageId ?? ""));
+      if (!child) { report.warnings.push("An unavailable subpage link was omitted"); return null; }
+      return { ...node, attrs: { ...node.attrs, title: child.title, icon: child.icon } };
+    }
+    return node.content ? { ...node, content: node.content.map(hydrate).filter((n): n is PMNode => n !== null) } : node;
+  };
+  const body = toMarkdown(hydrate(doc)!, report);
   return { markdown: `# ${title?.title || "Untitled"}\n\n${body}`, warnings: [...new Set(report.warnings)], revision };
 }
 
@@ -51,6 +67,7 @@ export async function editDocument(
   expectedRevision: number | null,
 ) {
   const access = await requirePageAccess(env, actor, pageId, "write");
+  await processPageReferences(env, { workspaceId: access.workspaceId, parentIds: [pageId] });
   if (needsExpectedRevision(ops) && expectedRevision === null) {
     throw new AppError("invalid_input", "replace, update_text and delete need expectedRevision (from the last read)");
   }

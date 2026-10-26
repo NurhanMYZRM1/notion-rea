@@ -1,9 +1,10 @@
-import { CreatePageInput, MovePageInput, newId, type PageDetail, type PageSummary, type PMNode, UpdatePageInput } from "@workspace/core";
+import { ArchivePageInput, CreatePageInput, CreateSubpageInput, MovePageInput, newId, type PageDetail, type PageSummary, type PMNode, UpdatePageInput } from "@workspace/core";
 import { generateKeyBetween } from "fractional-indexing";
 import type { z } from "zod";
 import { AppError, conflict, notFound } from "../errors";
 import { pageUrl } from "../util";
 import { type Access, type Actor, audit, requireAccess, requirePageAccess } from "./access";
+import { processPageReferences } from "./page-references";
 
 export interface PageRow {
   id: string;
@@ -53,7 +54,7 @@ export function page(env: Env, id: string) {
 
 export async function publish(env: Env, workspaceId: string, invalidate: (string | null)[][], ctx?: ExecutionContext): Promise<void> {
   const send = env.WORKSPACE.get(env.WORKSPACE.idFromName(workspaceId))
-    .publish({ invalidate, at: Date.now() })
+    .publish({ invalidate: [...invalidate, ["hierarchy", workspaceId]], at: Date.now() })
     .catch(() => {});
   if (ctx) ctx.waitUntil(send);
   else await send;
@@ -88,22 +89,34 @@ export async function listChildren(
 
 export async function getPage(env: Env, actor: Actor, pageId: string): Promise<PageDetail> {
   const access = await requirePageAccess(env, actor, pageId, "read");
+  await processPageReferences(env, { workspaceId: access.workspaceId, parentIds: [pageId] });
   const row = (await getRow(env, pageId))!;
   const crumbs = await env.DB.prepare(
-    `WITH RECURSIVE chain(id, parent_id, title, depth) AS (
-       SELECT id, parent_id, title, 0 FROM pages WHERE id = ?
-       UNION ALL SELECT p.id, p.parent_id, p.title, c.depth + 1 FROM pages p JOIN chain c ON p.id = c.parent_id WHERE c.depth < 50
-     ) SELECT id, title FROM chain WHERE id != ? ORDER BY depth DESC`,
+    `WITH RECURSIVE chain(id, parent_id, title) AS (
+       SELECT id, parent_id, title FROM pages WHERE id = ? AND workspace_id = ?
+       UNION SELECT p.id, p.parent_id, p.title FROM pages p JOIN chain c ON p.id = c.parent_id WHERE p.workspace_id = ? AND p.state != 'deleted'
+     ) SELECT id, parent_id, title FROM chain`,
   )
-    .bind(pageId, pageId)
-    .all<{ id: string; title: string }>();
+    .bind(pageId, access.workspaceId, access.workspaceId)
+    .all<{ id: string; parent_id: string | null; title: string }>();
+  const byId = new Map(crumbs.results.map((crumb) => [crumb.id, crumb]));
+  const breadcrumbs: { id: string; title: string }[] = [];
+  let parentId = row.parent_id;
+  byId.delete(pageId);
+  while (parentId && byId.has(parentId)) {
+    const crumb: { id: string; parent_id: string | null; title: string } = byId.get(parentId)!;
+    breadcrumbs.push({ id: crumb.id, title: crumb.title });
+    byId.delete(parentId);
+    parentId = crumb.parent_id;
+  }
+  breadcrumbs.reverse();
   const fav = await env.DB.prepare("SELECT 1 AS x FROM favorites WHERE user_id = ? AND page_id = ?")
     .bind(access.actor.userId, pageId)
     .first();
   return {
     ...toSummary(env, row),
     props: JSON.parse(row.props),
-    breadcrumbs: crumbs.results,
+    breadcrumbs,
     createdAt: row.created_at,
     createdBy: row.created_by ?? "",
     archivedAt: row.archived_at,
@@ -141,38 +154,66 @@ export async function createPage(
   workspaceId: string,
   raw: z.input<typeof CreatePageInput>,
   body?: PMNode,
-  extra: { databaseId?: string; isDatabase?: boolean; props?: Record<string, unknown> } = {},
+  extra: { databaseId?: string; isDatabase?: boolean; props?: Record<string, unknown>; afterBlockId?: string } = {},
 ): Promise<PageSummary> {
   const access = await requireAccess(env, actor, workspaceId, "write");
   const input = CreatePageInput.parse(raw);
   if (input.parentId) {
     const parent = await requirePageAccess(env, actor, input.parentId, "write");
     if (parent.page.workspace_id !== workspaceId || parent.page.state !== "active") throw new AppError("invalid_input", "Parent page is not available");
+    if (parent.page.is_database && extra.databaseId !== input.parentId) throw new AppError("invalid_input", "Use New record inside a database");
   }
   const id = input.id ?? newId("pg");
   const existing = await getRow(env, id);
   if (existing) {
     // A tombstone's id is never reusable: that would resurrect a permanently deleted page.
-    if (existing.workspace_id !== workspaceId || existing.state === "deleted") throw conflict("Id already in use");
+    if (existing.workspace_id !== workspaceId || existing.state === "deleted" || existing.parent_id !== input.parentId || existing.database_id !== (extra.databaseId ?? null)) throw conflict("Id already in use");
   } else {
     const t = Date.now();
     const position = await positionAfter(env, workspaceId, input.parentId, input.afterId);
-    await env.DB.prepare(
+    const insert = env.DB.prepare(
       `INSERT INTO pages (id, workspace_id, parent_id, database_id, is_database, title, icon, position, props, created_by, created_at, updated_by, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`,
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+       WHERE (? IS NULL OR EXISTS (SELECT 1 FROM pages parent WHERE parent.id = ? AND parent.workspace_id = ?
+         AND parent.state = 'active' AND (parent.is_database = 0 OR parent.id = ?)))
+       ON CONFLICT(id) DO NOTHING`,
     )
-      .bind(id, workspaceId, input.parentId, extra.databaseId ?? null, extra.isDatabase ? 1 : 0, input.title, input.icon ?? null, position, JSON.stringify(extra.props ?? {}), actor.userId, t, actor.userId, t)
-      .run();
+      .bind(id, workspaceId, input.parentId, extra.databaseId ?? null, extra.isDatabase ? 1 : 0, input.title, input.icon ?? null, position, JSON.stringify(extra.props ?? {}), actor.userId, t, actor.userId, t,
+        input.parentId, input.parentId, workspaceId, extra.databaseId ?? null);
+    await env.DB.batch([insert, ...(extra.afterBlockId && input.parentId ? [env.DB.prepare(
+      `INSERT INTO page_reference_anchors(child_id, parent_id, after_block_id)
+       SELECT id, parent_id, ? FROM pages WHERE id = ? AND workspace_id = ? AND parent_id = ?
+       ON CONFLICT(child_id) DO NOTHING`,
+    ).bind(extra.afterBlockId, id, workspaceId, input.parentId)] : [])]);
+    const created = await getRow(env, id);
+    if (!created) throw conflict("Parent page changed or is no longer available; refresh and retry");
+    if (created.workspace_id !== workspaceId || created.state === "deleted" || created.parent_id !== input.parentId || created.database_id !== (extra.databaseId ?? null)) throw conflict("Id already in use");
     await env.DB.prepare(
       "INSERT INTO search_docs (page_id, workspace_id, title) VALUES (?, ?, ?) ON CONFLICT(page_id) DO UPDATE SET title = excluded.title",
     )
-      .bind(id, workspaceId, input.title)
+      .bind(id, workspaceId, created.title)
       .run();
     await audit(env, access, "page.create", id);
   }
   if (body) await page(env, id).initialize(id, workspaceId, body);
+  await processPageReferences(env, { workspaceId, parentIds: [input.parentId] });
   await publish(env, workspaceId, [["pages", input.parentId], ["recents"]]);
   return toSummary(env, (await getRow(env, id))!);
+}
+
+/** Client ids make a lost create response safe to retry, including after metadata was committed. */
+export async function createSubpage(env: Env, actor: Actor, parentId: string, raw: unknown): Promise<{ page: PageSummary; parentRevision: number }> {
+  const access = await requirePageAccess(env, actor, parentId, "write");
+  if (access.page.state !== "active") throw conflict("Parent page is in the trash; restore it first");
+  if (access.page.is_database) throw new AppError("invalid_input", "Use New record inside a database");
+  const input = CreateSubpageInput.parse(raw);
+  const existing = await getRow(env, input.id);
+  if (existing && (existing.workspace_id !== access.workspaceId || existing.parent_id !== parentId || existing.database_id || existing.state !== "active")) {
+    throw conflict("Id already in use");
+  }
+  const result = await createPage(env, actor, access.workspaceId, { id: input.id, parentId, title: input.title }, undefined, { afterBlockId: input.afterBlockId });
+  const parentDocument: { revision: number } = await page(env, parentId).read(parentId);
+  return { page: result, parentRevision: parentDocument.revision };
 }
 
 export async function updatePage(env: Env, actor: Actor, pageId: string, raw: unknown): Promise<PageSummary> {
@@ -191,6 +232,7 @@ export async function updatePage(env: Env, actor: Actor, pageId: string, raw: un
   if (input.title !== undefined) {
     await env.DB.prepare("UPDATE search_docs SET title = ? WHERE page_id = ?").bind(row.title, pageId).run();
   }
+  await processPageReferences(env, { workspaceId: access.workspaceId, parentIds: [row.parent_id] });
   await publish(env, access.workspaceId, [["page", pageId], ["pages", row.parent_id], ["recents"], ["favorites"], ...(row.database_id ? [["database", row.database_id]] : [])]);
   return toSummary(env, row);
 }
@@ -204,11 +246,12 @@ export async function movePage(env: Env, actor: Actor, pageId: string, raw: unkn
   if (input.parentId) {
     const target = await requirePageAccess(env, actor, input.parentId, "write");
     if (target.page.workspace_id !== access.workspaceId || target.page.state !== "active") throw new AppError("invalid_input", "Target is not available");
+    if (target.page.is_database) throw new AppError("invalid_input", "Use New record inside a database");
     // Reject cycles: the target may not be this page or one of its descendants.
     const cycle = await env.DB.prepare(
-      `WITH RECURSIVE up(id, parent_id, depth) AS (
-         SELECT id, parent_id, 0 FROM pages WHERE id = ?
-         UNION ALL SELECT p.id, p.parent_id, u.depth + 1 FROM pages p JOIN up u ON p.id = u.parent_id WHERE u.depth < 200
+      `WITH RECURSIVE up(id, parent_id) AS (
+         SELECT id, parent_id FROM pages WHERE id = ?
+         UNION SELECT p.id, p.parent_id FROM pages p JOIN up u ON p.id = u.parent_id
        ) SELECT 1 AS hit FROM up WHERE id = ? LIMIT 1`,
     )
       .bind(input.parentId, pageId)
@@ -217,19 +260,29 @@ export async function movePage(env: Env, actor: Actor, pageId: string, raw: unkn
   }
   const position = await positionAfter(env, access.workspaceId, input.parentId, input.afterId);
   const result = await env.DB.prepare(
-    "UPDATE pages SET parent_id = ?, position = ?, revision = revision + 1, updated_at = ?, updated_by = ? WHERE id = ? AND revision = ?",
+    `WITH RECURSIVE target_ancestors(id, parent_id) AS (
+       SELECT id, parent_id FROM pages WHERE id = ? AND workspace_id = ?
+       UNION SELECT p.id, p.parent_id FROM pages p JOIN target_ancestors a ON p.id = a.parent_id WHERE p.workspace_id = ?
+     ) UPDATE pages SET parent_id = ?, position = ?, revision = revision + 1, updated_at = ?, updated_by = ?
+       WHERE id = ? AND revision = ? AND state = 'active'
+         AND NOT EXISTS (SELECT 1 FROM target_ancestors WHERE id = ?)
+         AND (? IS NULL OR EXISTS (SELECT 1 FROM pages target WHERE target.id = ? AND target.workspace_id = ? AND target.state = 'active' AND target.is_database = 0))`,
   )
-    .bind(input.parentId, position, Date.now(), actor.userId, pageId, input.expectedRevision)
+    .bind(input.parentId, access.workspaceId, access.workspaceId, input.parentId, position, Date.now(), actor.userId, pageId, input.expectedRevision, pageId, input.parentId, input.parentId, access.workspaceId)
     .run();
   const row = (await getRow(env, pageId))!;
-  if (!result.meta.changes) throw conflict("Page was changed by someone else", toSummary(env, row));
+  if (!result.meta.changes) {
+    if (row.revision === input.expectedRevision && row.state === "active") throw new AppError("invalid_input", "Target changed or is no longer available; refresh and retry");
+    throw conflict("Page was changed by someone else", toSummary(env, row));
+  }
+  await processPageReferences(env, { workspaceId: access.workspaceId, parentIds: [before.parent_id, input.parentId] });
   await publish(env, access.workspaceId, [["pages", before.parent_id], ["pages", input.parentId], ["page", pageId]]);
   return toSummary(env, row);
 }
 
-const SUBTREE = `WITH RECURSIVE sub(id, depth) AS (
-  SELECT id, 0 FROM pages WHERE id = ?
-  UNION ALL SELECT p.id, s.depth + 1 FROM pages p JOIN sub s ON p.parent_id = s.id WHERE p.state = ? AND s.depth < 200
+const SUBTREE = `WITH RECURSIVE sub(id) AS (
+  SELECT id FROM pages WHERE id = ? AND workspace_id = ? AND (? = 0 OR parent_id IS ?)
+  UNION SELECT p.id FROM pages p JOIN sub s ON p.parent_id = s.id WHERE p.state = ? AND p.workspace_id = ?
 )`;
 
 async function notifyOpenDocs(env: Env, pageIds: string[], fn: (stub: ReturnType<typeof page>, id: string) => Promise<unknown>) {
@@ -243,19 +296,30 @@ async function notifyOpenDocs(env: Env, pageIds: string[], fn: (stub: ReturnType
 }
 
 /** Move a page and its active descendants to the trash. Idempotent. */
-export async function archivePage(env: Env, actor: Actor, pageId: string): Promise<PageSummary> {
+export async function archivePage(env: Env, actor: Actor, pageId: string, raw: unknown = {}): Promise<PageSummary> {
   const access = await requirePageAccess(env, actor, pageId, "archive");
+  const input = ArchivePageInput.parse(raw);
+  const guarded = input.expectedParentId !== undefined;
   const row = (await getRow(env, pageId))!;
+  if (guarded && row.parent_id !== input.expectedParentId) throw conflict("This page moved; refresh its parent before deleting the subpage block", toSummary(env, row));
   if (row.state === "archived") return toSummary(env, row);
   const t = Date.now();
   const affected = await env.DB.prepare(
     `${SUBTREE} UPDATE pages SET state = 'archived', archived_at = ?, archived_by = ?, archive_root = ?, revision = revision + 1, updated_at = ?
      WHERE id IN (SELECT id FROM sub) AND state = 'active' RETURNING id`,
   )
-    .bind(pageId, "active", t, actor.userId, pageId, t)
+    .bind(pageId, access.workspaceId, guarded ? 1 : 0, input.expectedParentId ?? null, "active", access.workspaceId, t, actor.userId, pageId, t)
     .all<{ id: string }>();
+  if (!affected.results.some((page) => page.id === pageId)) {
+    const current = await getRow(env, pageId);
+    if (!current || current.state === "deleted") throw notFound();
+    if (guarded && current.parent_id !== input.expectedParentId) throw conflict("This page moved; refresh its parent before deleting the subpage block", toSummary(env, current));
+    if (current.state !== "archived") throw conflict("Page changed while deleting the subpage block; refresh and retry", toSummary(env, current));
+    return toSummary(env, current); // A concurrent archive already completed this request.
+  }
   await audit(env, access, "page.archive", pageId, { count: affected.results.length });
   await notifyOpenDocs(env, affected.results.map((r) => r.id), (stub, id) => stub.setState(id, "archived"));
+  await processPageReferences(env, { workspaceId: access.workspaceId });
   await publish(env, access.workspaceId, [["pages", row.parent_id], ["page", pageId], ["trash"], ...(row.database_id ? [["database", row.database_id]] : [])]);
   return toSummary(env, (await getRow(env, pageId))!);
 }
@@ -281,6 +345,7 @@ export async function restorePage(env: Env, actor: Actor, pageId: string): Promi
     .all<{ id: string }>();
   await audit(env, access, "page.restore", pageId, { count: restored.results.length });
   await notifyOpenDocs(env, restored.results.map((r) => r.id), (stub, id) => stub.setState(id, "active"));
+  await processPageReferences(env, { workspaceId: access.workspaceId });
   await publish(env, access.workspaceId, [["pages", parentId], ["page", pageId], ["trash"], ...(row.database_id ? [["database", row.database_id]] : [])]);
   return toSummary(env, (await getRow(env, pageId))!);
 }
@@ -308,6 +373,7 @@ export async function deletePermanently(env: Env, actor: Actor, pageId: string):
   ]);
   for (let i = 0; i < files.results.length; i += 1000) await env.FILES.delete(files.results.slice(i, i + 1000).map((f) => f.r2_key));
   await Promise.allSettled(ids.map((id) => page(env, id).purge()));
+  await processPageReferences(env, { workspaceId: access.workspaceId });
   await audit(env, access, "page.delete", pageId, { count: ids.length });
   await publish(env, access.workspaceId, [["trash"], ["page", pageId]]);
   return { deleted: ids.length };

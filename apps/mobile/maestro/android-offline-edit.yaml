@@ -1,0 +1,20 @@
+# Harness removes only the API's adb reverse, retaining Metro, then cold-starts the dev client.
+appId: com.workspace.app
+---
+- extendedWaitUntil:
+    visible: "Mobile QA grandchild"
+    timeout: 30000
+- tapOn: "Mobile QA grandchild"
+- extendedWaitUntil:
+    visible: "Sync status: Offline|Sync status: Saved on device"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "Android editor verification"
+    timeout: 20000
+- tapOn: "Android editor verification"
+- inputText: " retained offline"
+- hideKeyboard
+- extendedWaitUntil:
+    visible: "Sync status: Saved on device"
+    timeout: 20000
+- takeScreenshot: android-offline-edit-saved

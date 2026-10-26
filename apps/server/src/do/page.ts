@@ -1,4 +1,4 @@
-import { FRAGMENT, plainText, type PMNode, type Role, jsonToY, yToJSON } from "@workspace/core";
+import { blockId, findBlock, FRAGMENT, plainText, type PMNode, type Role, jsonToY, yToJSON } from "@workspace/core";
 import {
   awarenessClocks,
   CLOSE,
@@ -23,6 +23,7 @@ interface SocketMeta {
   userId: string;
   workspaceId: string;
   role: Role;
+  schemaVersion: number;
   checkedAt: number;
   /** Awareness client ids/clocks last announced on this socket (cleared on close). */
   clients: { id: number; clock: number }[];
@@ -177,10 +178,15 @@ export class PageDocument extends DurableObject<Env> {
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
     this.ctx.acceptWebSocket(server, [userId]);
-    const meta: SocketMeta = { userId, workspaceId, role, checkedAt: Date.now(), clients: [] };
+    const schemaVersion = Number(request.headers.get("X-Document-Schema-Version") ?? 1);
+    const meta: SocketMeta = { userId, workspaceId, role, schemaVersion, checkedAt: Date.now(), clients: [] };
     server.serializeAttachment(meta);
 
     const doc = this.load();
+    if (schemaVersion < 2 && owningReferences(doc).length) {
+      this.endSocket(server, { type: "upgrade-required", requiredSchemaVersion: 2 }, CLOSE.upgradeRequired);
+      return new Response(null, { status: 101, webSocket: client });
+    }
     server.send(encodeControl({ type: "hello", revision: this.revision, role, state: pageState, v: PROTOCOL_VERSION }));
     const e = encoding.createEncoder();
     encoding.writeVarUint(e, MSG_SYNC);
@@ -228,6 +234,10 @@ export class PageDocument extends DurableObject<Env> {
     if (meta.role === "viewer" || state === "archived") {
       ws.send(encodeControl({ type: "read-only", reason: meta.role === "viewer" ? "viewer" : "archived" }));
       return; // not applied, not acknowledged: the client keeps it as an unsynchronized draft
+    }
+    if (!preservesOwningReferences(this.load(), update)) {
+      this.endSocket(ws, { type: "error", message: "Use page actions to create, move, or trash subpages" }, 1008);
+      return;
     }
     const result = this.commit(update, "ws");
     ws.send(encodeAck(result?.revision ?? this.revision));
@@ -364,6 +374,9 @@ export class PageDocument extends DurableObject<Env> {
       });
     }
     const plan = planEdits(this.load(), ops);
+    if (!preservesOwningReferences(this.load(), plan.update)) {
+      throw new AppError("invalid_input", "Use page actions to create, move, or trash subpages");
+    }
     const result = this.commit(plan.update, "agent");
     if (result?.effective.length) this.broadcastUpdate(result.effective);
     return { revision: result?.revision ?? this.revision, insertedIds: plan.insertedIds, warnings: plan.warnings, changed: !!result };
@@ -378,6 +391,72 @@ export class PageDocument extends DurableObject<Env> {
     const result = this.commit(Y.encodeStateAsUpdate(scratch), "init");
     this.setMeta("initialized", 1);
     return { revision: result?.revision ?? this.revision, applied: true };
+  }
+
+  /** Rebuild only owning links from current D1 metadata. Old outbox jobs cannot resurrect pages. */
+  async reconcileChildPages(parentId: string, workspaceId: string): Promise<{ revision: number; changed: boolean }> {
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const parent = await this.env.DB.prepare("SELECT state, is_database, archive_root FROM pages WHERE id = ? AND workspace_id = ?")
+        .bind(parentId, workspaceId).first<{ state: string; is_database: number; archive_root: string | null }>();
+      if (!parent || parent.state === "deleted" || parent.is_database) return { revision: this.revision, changed: false };
+      const children = await this.env.DB.prepare(`SELECT p.id, p.title, p.icon, a.after_block_id FROM pages p
+        LEFT JOIN page_reference_anchors a ON a.child_id = p.id AND a.parent_id = p.parent_id
+        WHERE p.workspace_id = ? AND p.parent_id = ? AND p.database_id IS NULL
+          AND (p.state = 'active' OR (? = 'archived' AND p.state = 'archived' AND p.archive_root IS ?))
+        ORDER BY p.position, p.id`)
+        .bind(workspaceId, parentId, parent.state, parent.archive_root)
+        .all<{ id: string; title: string; icon: string | null; after_block_id: string | null }>();
+      this.remember(parentId, workspaceId, parent.state);
+      const live = this.load();
+      const scratch = new Y.Doc();
+      Y.applyUpdate(scratch, Y.encodeStateAsUpdate(live));
+      const fragment = scratch.getXmlFragment(FRAGMENT);
+      const desired = new Map(children.results.map((c) => [c.id, c]));
+      const seen = new Set<string>();
+      scratch.transact(() => {
+        const clean = (container: Y.XmlFragment | Y.XmlElement) => {
+          for (let i = 0; i < container.length;) {
+            const element = container.get(i);
+            if (!(element instanceof Y.XmlElement)) { i++; continue; }
+            if (element.nodeName === "childPage") {
+              const id = String(element.getAttribute("pageId") ?? "");
+              const child = desired.get(id);
+              if (!child || seen.has(id)) { container.delete(i, 1); continue; }
+              seen.add(id);
+              if (!element.getAttribute("id")) element.setAttribute("id", blockId());
+              if (element.getAttribute("title") !== child.title) element.setAttribute("title", child.title);
+              if (element.getAttribute("icon") !== child.icon) element.setAttribute("icon", child.icon as unknown as string);
+            } else clean(element);
+            i++;
+          }
+        };
+        clean(fragment);
+        for (const child of children.results) {
+          if (seen.has(child.id)) continue;
+          const link = jsonToY({ type: "childPage", attrs: { id: blockId(), pageId: child.id, title: child.title, icon: child.icon } });
+          const anchor = child.after_block_id ? topLevelAnchor(fragment, child.after_block_id) : null;
+          if (anchor) {
+            if (anchor.element.nodeName === "paragraph" && !anchor.element.toString().replace(/<[^>]*>/g, "")) {
+              anchor.parent.delete(anchor.index, 1);
+              anchor.parent.insert(anchor.index, [link]);
+            } else anchor.parent.insert(anchor.index + 1, [link]);
+          } else fragment.insert(fragment.length, [link]);
+        }
+      });
+      const update = Y.encodeStateAsUpdate(scratch, Y.encodeStateVector(live));
+      const hasRefs = owningReferences(scratch).length > 0;
+      scratch.destroy();
+      const result = this.commit(update, "page-reference");
+      if (result?.effective.length) {
+        if (hasRefs) for (const ws of this.ctx.getWebSockets()) {
+          if (((ws.deserializeAttachment() as SocketMeta | null)?.schemaVersion ?? 1) < 2) {
+            this.endSocket(ws, { type: "upgrade-required", requiredSchemaVersion: 2 }, CLOSE.upgradeRequired);
+          }
+        }
+        this.broadcastUpdate(result.effective);
+      }
+      return { revision: result?.revision ?? this.revision, changed: !!result };
+    });
   }
 
   async setState(pageId: string, state: "active" | "archived"): Promise<void> {
@@ -417,6 +496,37 @@ export class PageDocument extends DurableObject<Env> {
   async evictForTest(): Promise<void> {
     this.doc = null;
   }
+}
+
+/** Include identity and multiplicity: generic edits cannot forge, copy, or remove owning links. */
+function owningReferences(doc: Y.Doc): string[] {
+  const refs: string[] = [];
+  const walk = (node: PMNode) => {
+    if (node.type === "childPage") refs.push(JSON.stringify([node.attrs?.id, node.attrs?.pageId]));
+    node.content?.forEach(walk);
+  };
+  walk(yToJSON(doc.getXmlFragment(FRAGMENT)));
+  return refs.sort();
+}
+
+function preservesOwningReferences(doc: Y.Doc, update: Uint8Array): boolean {
+  const scratch = new Y.Doc();
+  try {
+    Y.applyUpdate(scratch, Y.encodeStateAsUpdate(doc));
+    const before = owningReferences(scratch);
+    Y.applyUpdate(scratch, update);
+    return JSON.stringify(before) === JSON.stringify(owningReferences(scratch));
+  } finally { scratch.destroy(); }
+}
+
+/** Owning links are document blocks, even when a supplied cursor anchor names a list paragraph. */
+function topLevelAnchor(fragment: Y.XmlFragment, id: string) {
+  const found = findBlock(fragment, id);
+  if (!found) return null;
+  let element = found.element;
+  while (element.parent instanceof Y.XmlElement) element = element.parent;
+  const index = fragment.toArray().indexOf(element);
+  return index < 0 ? null : { element, parent: fragment, index };
 }
 
 function concat(parts: Uint8Array[]): Uint8Array {

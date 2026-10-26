@@ -4,7 +4,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import * as Y from "yjs";
-import { cacheStatus, clearCache, docStore, evict, kvGet, kvSet, LIMITS, loadDoc, migrate, openDoc, pendingDrafts } from "../lib/doc-store.ts";
+import {
+  cacheStatus,
+  clearCache,
+  docStore,
+  evict,
+  kvGet,
+  kvSet,
+  LIMITS,
+  loadDoc,
+  migrate,
+  openDoc,
+  pendingDrafts,
+  pinDoc,
+} from "../lib/doc-store.ts";
 import { fakeSql } from "./sqlite-fake.ts";
 
 async function setup(path?: string) {
@@ -34,7 +47,10 @@ test("append/load round-trips updates and local counters; markSynced clears pend
   assert.equal(loaded.updates.length, 3);
   assert.equal(loaded.localCounter, 2);
   assert.equal(loaded.syncedCounter, 0);
-  assert.deepEqual((await pendingDrafts(sql)).map((d) => ({ ...d })), [{ pageId: "pg_a", workspaceId: "ws_1", title: "A" }]);
+  assert.deepEqual(
+    (await pendingDrafts(sql)).map((d) => ({ ...d })),
+    [{ pageId: "pg_a", workspaceId: "ws_1", title: "A" }],
+  );
   await store.markSynced(2, 7);
   loaded = await store.load();
   assert.equal(loaded.syncedCounter, 2);
@@ -48,7 +64,8 @@ test("load merges more than 100 rows into one without losing content or counters
   await openDoc(sql, "pg_m", "ws_1", "M");
   const store = docStore(sql, "pg_m");
   const doc = new Y.Doc();
-  for (let i = 0; i < LIMITS.mergeAbove + 20; i++) await store.append(edit(doc, `${i},`), i + 1);
+  for (let i = 0; i < LIMITS.mergeAbove + 20; i++)
+    await store.append(edit(doc, `${i},`), i + 1);
   const first = await store.load();
   assert.equal(first.updates.length, 1);
   assert.equal(first.localCounter, LIMITS.mergeAbove + 20);
@@ -70,7 +87,13 @@ test("eviction keeps the newest docs within limits and never drops unsynced edit
   assert.ok(!evicted.includes("pg_00"), "dirty doc kept");
   assert.ok(!evicted.includes("pg_01"), "open doc kept");
   assert.equal((await cacheStatus(sql)).docs, LIMITS.docs);
-  assert.deepEqual(evicted.sort(), ["pg_02", "pg_03", "pg_04", "pg_05", "pg_06"]);
+  assert.deepEqual(evicted.sort(), [
+    "pg_02",
+    "pg_03",
+    "pg_04",
+    "pg_05",
+    "pg_06",
+  ]);
   const byBytes = await evict(sql, null, { ...LIMITS, bytes: 0 });
   assert.ok(!byBytes.includes("pg_00"));
   assert.equal((await cacheStatus(sql)).docs, 1);
@@ -102,4 +125,25 @@ test("acknowledged appends survive closing and reopening the database file (forc
   const reloaded = await loadDoc(b, "pg_q");
   assert.equal(reloaded.getText("t").toString(), "typed before kill");
   assert.equal((await pendingDrafts(b)).length, 1);
+});
+
+test("all mounted sessions survive eviction and clear cache, including repeated page mounts", async () => {
+  const sql = await setup();
+  for (const id of ["pg_parent", "pg_child", "pg_other"]) {
+    await openDoc(sql, id, "ws_1", id);
+    await docStore(sql, id).append(edit(new Y.Doc(), id), null);
+  }
+  const releaseParent = pinDoc(sql, "pg_parent");
+  const releaseChild = pinDoc(sql, "pg_child");
+  const releaseSecondParent = pinDoc(sql, "pg_parent");
+  releaseParent();
+  const removed = await evict(sql, null, { ...LIMITS, docs: 0, bytes: 0 });
+  assert.deepEqual(removed, ["pg_other"]);
+  await clearCache(sql);
+  assert.equal((await cacheStatus(sql)).docs, 2);
+  assert.ok((await docStore(sql, "pg_parent").load()).updates.length);
+  releaseSecondParent();
+  releaseChild();
+  await clearCache(sql);
+  assert.equal((await cacheStatus(sql)).docs, 0);
 });

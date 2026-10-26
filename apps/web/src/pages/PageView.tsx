@@ -1,3 +1,4 @@
+import { Ellipsis, MessageSquare, Star } from "lucide-react";
 import { ApiRequestError, can, type Me, newId, type PageDetail, type PageSummary } from "@workspace/core";
 import type { SyncState } from "@workspace/core/sync";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -96,7 +97,7 @@ export default function PageView({ id, me }: { id: string; me: Me }) {
     try {
       await api.archivePage(id);
       invalidatePage(qc, page);
-      toast("Moved to trash");
+      toast("Moved to trash", "info", { label: "Undo", onClick: () => void restore() });
     } catch (err) {
       toast(errorMessage(err), "error");
     }
@@ -125,18 +126,19 @@ export default function PageView({ id, me }: { id: string; me: Me }) {
           <Presence store={presence} />
           <FavoriteButton page={page} />
           <button type="button" className={`icon-btn ${commentsOpen ? "is-on" : ""}`} aria-pressed={commentsOpen} aria-label="Comments" title="Comments" onClick={() => setCommentsOpen((o) => !o)}>
-            💬
+            <MessageSquare size={18} />
           </button>
           <Menu
             label="Page actions"
             items={[
+              { label: "Show this page in Graph", onSelect: () => navigate(`/w/${page.workspaceId}/graph?focus=${id}`) },
               { label: "Export Markdown", onSelect: () => void exportMd(), disabledReason: offlineReason },
-              editable && !page.databaseId && !page.isDatabase && { label: "Add a sub-page", onSelect: () => void createPageIn(qc, page.workspaceId, id), disabledReason: offlineReason },
+              editable && !page.isDatabase && { label: "Add a sub-page", onSelect: () => void createPageIn(qc, page.workspaceId, id), disabledReason: offlineReason },
               editable && !page.databaseId && { label: "Move to…", onSelect: () => setMoveOpen(true), disabledReason: offlineReason },
               canArchive && !archived && { label: "Move to trash", onSelect: () => void trash(), danger: true, disabledReason: offlineReason },
             ]}
           >
-            ⋯
+            <Ellipsis size={20} />
           </Menu>
         </div>
       </TopBar>
@@ -266,13 +268,14 @@ function FavoriteButton({ page }: { page: PageDetail }) {
   };
   return (
     <OnlineButton className={`icon-btn ${page.favorite ? "is-on" : ""}`} aria-pressed={page.favorite} aria-label="Favorite" title={page.favorite ? "Remove from favorites" : "Add to favorites"} onClick={() => void toggle()}>
-      {page.favorite ? "★" : "☆"}
+      <Star size={18} fill={page.favorite ? "currentColor" : "none"} />
     </OnlineButton>
   );
 }
 
 /** Titles and icons also show in the tree, favorites and recents (the event channel only invalidates the tree). */
 function invalidateListings(qc: QueryClient, page: PageDetail) {
+  void qc.invalidateQueries({ queryKey: ["hierarchy", page.workspaceId] });
   void qc.invalidateQueries({ queryKey: qk.children(page.workspaceId, page.parentId) });
   void qc.invalidateQueries({ queryKey: qk.recents(page.workspaceId) });
   void qc.invalidateQueries({ queryKey: qk.favorites(page.workspaceId) });

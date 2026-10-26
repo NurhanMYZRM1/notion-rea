@@ -34,11 +34,12 @@ export const ID_NODE_TYPES = [
   "horizontalRule",
   "image",
   "fileAttachment",
+  "childPage",
   "details",
 ] as const;
 
 export const TEXTBLOCK_TYPES = new Set(["paragraph", "heading", "codeBlock", "detailsSummary"]);
-const LEAF_BLOCK_TYPES = new Set(["horizontalRule", "image", "fileAttachment"]);
+const LEAF_BLOCK_TYPES = new Set(["horizontalRule", "image", "fileAttachment", "childPage"]);
 
 // ---------- Y <-> JSON ----------
 
@@ -138,6 +139,7 @@ export function plainText(doc: PMNode): string {
     if (TEXTBLOCK_TYPES.has(n.type)) lines.push(inlineText(n));
     else if (n.type === "image") lines.push(String(n.attrs?.alt ?? ""));
     else if (n.type === "fileAttachment") lines.push(String(n.attrs?.name ?? ""));
+    else if (n.type === "childPage") lines.push(String(n.attrs?.title || "Untitled"));
     else (n.content ?? []).forEach(walk);
   };
   walk(doc);

@@ -1,12 +1,16 @@
 import { type Editor, Extension } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
-import { TextSelection, type Transaction } from "@tiptap/pm/state";
+import { NodeSelection, TextSelection, type Transaction } from "@tiptap/pm/state";
+import { childPageIds } from "./child-page";
 
 const ITEM_TYPES = new Set(["listItem", "taskItem"]);
 
 /** The block the cursor is in: a list item, or the top-level block. */
 export function currentBlock(editor: Editor): { node: PMNode; pos: number; depth: number; offset: number } | null {
   const { $from } = editor.state.selection;
+  if (editor.state.selection instanceof NodeSelection) {
+    return { node: editor.state.selection.node, pos: $from.pos, depth: $from.depth + 1, offset: 0 };
+  }
   for (let d = $from.depth; d >= 1; d--) {
     const node = $from.node(d);
     if (ITEM_TYPES.has(node.type.name) || d === 1) {
@@ -17,7 +21,7 @@ export function currentBlock(editor: Editor): { node: PMNode; pos: number; depth
   return null;
 }
 
-function move(editor: Editor, dir: -1 | 1, dispatch?: (tr: Transaction) => void): boolean {
+function move(editor: Editor, dir: -1 | 1, tr: Transaction, dispatch?: (tr: Transaction) => void): boolean {
   const block = currentBlock(editor);
   if (!block) return false;
   const { $from } = editor.state.selection;
@@ -27,14 +31,13 @@ function move(editor: Editor, dir: -1 | 1, dispatch?: (tr: Transaction) => void)
   if (siblingIndex < 0 || siblingIndex >= parent.childCount) return false;
   if (!dispatch) return true;
   const sibling = parent.child(siblingIndex);
-  const tr = editor.state.tr;
   const start = block.pos;
   const end = start + block.node.nodeSize;
   tr.delete(start, end);
   const target = dir === -1 ? start - sibling.nodeSize : start + sibling.nodeSize;
   tr.insert(target, block.node);
-  tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(target + block.offset, tr.doc.content.size))));
-  dispatch(tr.scrollIntoView());
+  tr.setSelection(block.node.isAtom ? NodeSelection.create(tr.doc, target) : TextSelection.near(tr.doc.resolve(Math.min(target + block.offset, tr.doc.content.size))));
+  tr.scrollIntoView();
   return true;
 }
 
@@ -50,23 +53,24 @@ declare module "@tiptap/core" {
 }
 
 /** Keyboard-accessible block reordering and duplication (the drag handle is the pointer equivalent). */
-export const BlockActions = Extension.create({
+export const BlockActions = Extension.create<{ archiveChildPages?: (ids: string[]) => void }>({
   name: "blockActions",
+  addOptions() { return {}; },
   addCommands() {
     return {
       moveBlockUp:
         () =>
-        ({ editor, dispatch }) =>
-          move(editor, -1, dispatch),
+        ({ editor, tr, dispatch }) =>
+          move(editor, -1, tr, dispatch),
       moveBlockDown:
         () =>
-        ({ editor, dispatch }) =>
-          move(editor, 1, dispatch),
+        ({ editor, tr, dispatch }) =>
+          move(editor, 1, tr, dispatch),
       duplicateBlock:
         () =>
         ({ editor, tr, dispatch }) => {
           const block = currentBlock(editor);
-          if (!block) return false;
+          if (!block || childPageIds(block.node).length) return false;
           if (dispatch) tr.insert(block.pos + block.node.nodeSize, block.node.copy(block.node.content));
           return true;
         },
@@ -75,6 +79,11 @@ export const BlockActions = Extension.create({
         ({ editor, tr, dispatch }) => {
           const block = currentBlock(editor);
           if (!block) return false;
+          const ids = childPageIds(block.node);
+          if (ids.length) {
+            if (dispatch) this.options.archiveChildPages?.(ids);
+            return !!this.options.archiveChildPages;
+          }
           if (dispatch) tr.delete(block.pos, block.pos + block.node.nodeSize);
           return true;
         },

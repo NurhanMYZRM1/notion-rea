@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronRight, FileText, Plus, Table2 } from "lucide-react";
 import type { PageSummary } from "@workspace/core";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { type DragEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
@@ -28,8 +29,8 @@ const navExpanded = createStore<ReadonlySet<string>>(new Set());
 
 export function useChildren(ws: string, parentId: string | null, enabled = true) {
   return useInfiniteQuery({
-    queryKey: qk.children(ws, parentId),
-    queryFn: ({ pageParam }) => api.children(ws, parentId, pageParam),
+    queryKey: qk.hierarchy(ws, parentId),
+    queryFn: ({ pageParam }) => api.hierarchy(ws, { parentId, cursor: pageParam }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
     enabled,
@@ -148,7 +149,7 @@ interface LevelProps extends TreeProps {
 
 function TreeLevel(props: LevelProps) {
   const q = useChildren(props.ws, props.parentId);
-  const pages = (q.data?.pages.flatMap((p) => p.pages) ?? []).filter((p) => p.id !== props.excludeId);
+  const pages = (q.data?.pages.flatMap((p) => p.nodes) ?? []).filter((p) => p.id !== props.excludeId);
   if (q.isPending)
     return (
       <li role="treeitem" aria-level={props.level} aria-disabled="true" className="tree-note" data-id="">
@@ -199,13 +200,14 @@ function TreeItem(props: LevelProps & { page: PageSummary; posinset: number; set
   const [drop, setDrop] = useState<Zone | null>(null);
   const liRef = useRef<HTMLLIElement>(null);
   const nav = props.mode === "nav";
-  const draggable = nav && !!props.canWrite;
+  const draggable = nav && !!props.canWrite && !page.databaseId;
   const selected = nav ? props.activeId === page.id : props.pickedId === page.id;
   const title = page.title || "Untitled";
 
   const activate = () => {
     if (nav) navigate(`/p/${page.id}`);
-    else props.onPick?.(page);
+    else if (!page.isDatabase) props.onPick?.(page);
+    else props.setExpanded(page.id, !open);
   };
 
   const zoneOf = (e: DragEvent<HTMLElement>): Zone => {
@@ -223,6 +225,7 @@ function TreeItem(props: LevelProps & { page: PageSummary; posinset: number; set
     } finally {
       for (const p of new Set([src.parentId, parentId])) void qc.invalidateQueries({ queryKey: qk.children(props.ws, p) });
       void qc.invalidateQueries({ queryKey: qk.page(src.id) });
+      await qc.invalidateQueries({ queryKey: ["hierarchy", props.ws] });
     }
   };
 
@@ -310,13 +313,13 @@ function TreeItem(props: LevelProps & { page: PageSummary; posinset: number; set
             if (page.hasChildren) props.setExpanded(page.id, !open);
           }}
         >
-          {page.hasChildren ? (open ? "▾" : "▸") : "•"}
+          {page.hasChildren ? (open ? <ChevronDown size={14} /> : <ChevronRight size={14} />) : null}
         </span>
         <span className="tree-icon" aria-hidden="true">
-          {page.icon || (page.isDatabase ? "▦" : "📄")}
+          {page.icon || (page.isDatabase ? <Table2 size={16} /> : <FileText size={16} />)}
         </span>
         <span className="tree-title">{title}</span>
-        {nav && props.canWrite && props.onAddChild && (
+        {nav && !page.isDatabase && props.canWrite && props.onAddChild && (
           <button
             type="button"
             tabIndex={-1}
@@ -329,7 +332,7 @@ function TreeItem(props: LevelProps & { page: PageSummary; posinset: number; set
               props.onAddChild?.(page.id);
             }}
           >
-            +
+            <Plus size={16} />
           </button>
         )}
       </div>

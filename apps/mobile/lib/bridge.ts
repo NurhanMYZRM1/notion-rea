@@ -1,12 +1,12 @@
 /**
- * Native ⇄ editor WebView bridge, protocol v1. Only Yjs updates and awareness updates cross it,
+ * Native ⇄ editor WebView bridge, protocol v2. Only Yjs updates and awareness updates cross it,
  * as base64 inside a versioned envelope; no cookies, tokens or API access ever reach the WebView.
  * Imported by both sides (Hermes and the DOM bundle), so it must stay dependency-free.
  *
  * Sequence: DOM mounts → `onBridgeReady(href)` → native `applyInit(full state)` once → DOM mounts the
  * editor → `onReady()`. Then `onLocalUpdate`/`applyRemote` carry incremental updates only.
  */
-export const BRIDGE_VERSION = 1;
+export const BRIDGE_VERSION = 2;
 
 /** A type alias (not an interface) so it stays assignable to expo/dom's JSON argument types. */
 export type BridgeMsg = {
@@ -24,7 +24,18 @@ export type UploadedFile = {
 };
 
 /** WebView → native: async function props of the editor DOM component. */
+export type ChildPageMetadata = {
+  id: string;
+  title: string;
+  icon?: string | null;
+};
+
 export interface EditorNativeProps {
+  resolvePages(pageIds: string[]): Promise<ChildPageMetadata[]>;
+  createSubpage(input: { afterBlockId?: string }): Promise<ChildPageMetadata>;
+  openPage(pageId: string): Promise<void>;
+  archivePage(pageId: string): Promise<void>;
+  movePage(pageId: string): Promise<void>;
   /** Imperative handle registered; `href` is the editor document (the only URL it may load). */
   onBridgeReady(href: string): Promise<void>;
   /** The editor is mounted after `applyInit` (open-to-editable). */
@@ -49,13 +60,16 @@ export type EditorHandle = {
   applyRemote(msg: BridgeMsg): void;
   applyAwareness(msg: BridgeMsg): void;
   setEditable(editable: boolean): void;
+  refreshPageMetadata(): void;
+  setTheme(scheme: "light" | "dark"): void;
 };
 
 const CHUNK = 0x8000;
 
 export function toBase64(bytes: Uint8Array): string {
   let bin = "";
-  for (let i = 0; i < bytes.length; i += CHUNK) bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  for (let i = 0; i < bytes.length; i += CHUNK)
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
   return btoa(bin);
 }
 
@@ -70,12 +84,15 @@ export function encodeMsg(bytes: Uint8Array): BridgeMsg {
   return { v: BRIDGE_VERSION, b64: toBase64(bytes) };
 }
 
-/** Validates the envelope; throws on anything that is not a v1 message so a mismatched bundle fails loudly. */
+/** Validates the envelope; throws on anything that is not a v2 message so a mismatched bundle fails loudly. */
 export function decodeMsg(msg: unknown): Uint8Array {
-  if (typeof msg !== "object" || msg === null) throw new Error("bridge: not a message");
+  if (typeof msg !== "object" || msg === null)
+    throw new Error("bridge: not a message");
   const { v, b64 } = msg as Partial<BridgeMsg>;
-  if (v !== BRIDGE_VERSION) throw new Error(`bridge: unsupported version ${String(v)}`);
-  if (typeof b64 !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) throw new Error("bridge: bad payload");
+  if (v !== BRIDGE_VERSION)
+    throw new Error(`bridge: unsupported version ${String(v)}`);
+  if (typeof b64 !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(b64))
+    throw new Error("bridge: bad payload");
   return fromBase64(b64);
 }
 
@@ -84,7 +101,11 @@ export function safeExternalUrl(raw: unknown): string | null {
   if (typeof raw !== "string" || raw.length > 4000) return null;
   try {
     const url = new URL(raw.trim());
-    return url.protocol === "http:" || url.protocol === "https:" || url.protocol === "mailto:" ? url.toString() : null;
+    return url.protocol === "http:" ||
+      url.protocol === "https:" ||
+      url.protocol === "mailto:"
+      ? url.toString()
+      : null;
   } catch {
     return null;
   }
@@ -92,7 +113,10 @@ export function safeExternalUrl(raw: unknown): string | null {
 
 /** Attachment id from a stored src; anything else is not ours to fetch with the session cookie. */
 export function attachmentId(src: unknown): string | null {
-  const m = typeof src === "string" ? /^\/api\/attachments\/([a-z]{1,4}_[0-9A-Za-z]{8,40})$/.exec(src) : null;
+  const m =
+    typeof src === "string"
+      ? /^\/api\/attachments\/([a-z]{1,4}_[0-9A-Za-z]{8,40})$/.exec(src)
+      : null;
   return m?.[1] ?? null;
 }
 
@@ -100,7 +124,13 @@ export function attachmentId(src: unknown): string | null {
  * The WebView may only (re)load its own editor document. `documentUrl` is null until the bundle
  * reported itself, i.e. during the initial load (iOS asks for it; Android does not).
  */
-export function navigationAllowed(documentUrl: string | null, requestUrl: string): boolean {
+export function navigationAllowed(
+  documentUrl: string | null,
+  requestUrl: string,
+): boolean {
   if (documentUrl === null) return true;
-  return requestUrl === "about:blank" || requestUrl.split("#")[0] === documentUrl.split("#")[0];
+  return (
+    requestUrl === "about:blank" ||
+    requestUrl.split("#")[0] === documentUrl.split("#")[0]
+  );
 }

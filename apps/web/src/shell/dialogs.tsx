@@ -31,6 +31,8 @@ export function MoveDialog({ page, onClose }: { page: Movable; onClose: () => vo
       }
       for (const p of new Set([page.parentId, parentId])) void qc.invalidateQueries({ queryKey: qk.children(page.workspaceId, p) });
       void qc.invalidateQueries({ queryKey: qk.page(page.id) });
+      void qc.invalidateQueries({ queryKey: ["hierarchy", page.workspaceId] });
+      void qc.invalidateQueries({ queryKey: ["page"] });
       toast(`Moved “${page.title || "Untitled"}” to ${parentId ? `“${target?.title || "Untitled"}”` : "the top level"}`);
       onClose();
     } catch (err) {

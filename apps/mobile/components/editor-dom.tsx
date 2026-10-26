@@ -4,12 +4,25 @@
 // It has no network, cookies or native-module access; everything goes through lib/bridge.ts.
 import "@workspace/editor/styles.css";
 import "./editor-dom.css";
-import { WorkspaceEditor } from "@workspace/editor";
-import { type DOMImperativeFactory, type DOMProps, useDOMImperativeHandle } from "expo/dom";
-import { type Ref, useEffect, useRef, useState } from "react";
-import { applyAwarenessUpdate, Awareness, encodeAwarenessUpdate } from "y-protocols/awareness";
+import { WorkspaceEditor, type ChildPageHost } from "@workspace/editor";
+import {
+  type DOMImperativeFactory,
+  type DOMProps,
+  useDOMImperativeHandle,
+} from "expo/dom";
+import { type Ref, useEffect, useMemo, useRef, useState } from "react";
+import {
+  applyAwarenessUpdate,
+  Awareness,
+  encodeAwarenessUpdate,
+} from "y-protocols/awareness";
 import * as Y from "yjs";
-import { decodeMsg, type EditorHandle, type EditorNativeProps, encodeMsg } from "../lib/bridge";
+import {
+  decodeMsg,
+  type EditorHandle,
+  type EditorNativeProps,
+  encodeMsg,
+} from "../lib/bridge";
 
 const NATIVE = "native";
 
@@ -26,6 +39,8 @@ export default function EditorDom(props: Props) {
   const [awareness] = useState(() => new Awareness(doc));
   const [initialized, setInitialized] = useState(false);
   const [editable, setEditable] = useState(false);
+  const pendingLocalUpdates = useRef<Promise<void>>(Promise.resolve());
+  const metadataListeners = useRef(new Set<() => void>());
   const p = useRef(props);
   p.current = props;
 
@@ -38,8 +53,14 @@ export default function EditorDom(props: Props) {
         setInitialized(true);
       },
       applyRemote: (msg: unknown) => Y.applyUpdate(doc, decodeMsg(msg), NATIVE),
-      applyAwareness: (msg: unknown) => applyAwarenessUpdate(awareness, decodeMsg(msg), NATIVE),
+      applyAwareness: (msg: unknown) =>
+        applyAwarenessUpdate(awareness, decodeMsg(msg), NATIVE),
       setEditable: (value: unknown) => setEditable(value === true),
+      refreshPageMetadata: () => metadataListeners.current.forEach((l) => l()),
+      setTheme: (scheme: unknown) => {
+        if (scheme === "light" || scheme === "dark")
+          document.documentElement.dataset.theme = scheme;
+      },
     }),
     [doc, awareness],
   );
@@ -47,10 +68,31 @@ export default function EditorDom(props: Props) {
   useEffect(() => {
     // Incremental updates only: one small message per edit, never the whole document.
     const onUpdate = (update: Uint8Array, origin: unknown) => {
-      if (origin !== NATIVE) void p.current.onLocalUpdate(encodeMsg(update));
+      if (origin !== NATIVE) {
+        const msg = encodeMsg(update);
+        pendingLocalUpdates.current = pendingLocalUpdates.current.then(() =>
+          p.current.onLocalUpdate(msg),
+        );
+      }
     };
-    const onAwareness = ({ added, updated, removed }: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
-      if (origin !== NATIVE) void p.current.onAwareness(encodeMsg(encodeAwarenessUpdate(awareness, [...added, ...updated, ...removed])));
+    const onAwareness = (
+      {
+        added,
+        updated,
+        removed,
+      }: { added: number[]; updated: number[]; removed: number[] },
+      origin: unknown,
+    ) => {
+      if (origin !== NATIVE)
+        void p.current.onAwareness(
+          encodeMsg(
+            encodeAwarenessUpdate(awareness, [
+              ...added,
+              ...updated,
+              ...removed,
+            ]),
+          ),
+        );
     };
     // Links never navigate the WebView: taps on read-only links and window.open go to the native side.
     const onClick = (e: MouseEvent) => {
@@ -58,7 +100,8 @@ export default function EditorDom(props: Props) {
       if (!a) return;
       e.preventDefault();
       const editing = !!a.closest('[contenteditable="true"]');
-      if (!editing && !a.closest(".file-attachment")) void p.current.onOpenLink((a as HTMLAnchorElement).href);
+      if (!editing && !a.closest(".file-attachment"))
+        void p.current.onOpenLink((a as HTMLAnchorElement).href);
     };
     const open = window.open;
     window.open = (url?: string | URL) => {
@@ -68,7 +111,9 @@ export default function EditorDom(props: Props) {
     // Keep the fixed toolbar on top of the keyboard: lift it by the part of the layout viewport the keyboard covers.
     const vv = window.visualViewport;
     const lift = () => {
-      const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+      const kb = vv
+        ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+        : 0;
       document.documentElement.style.setProperty("--kb", `${Math.round(kb)}px`);
       document.documentElement.classList.toggle("kb-open", kb > 40);
     };
@@ -94,10 +139,28 @@ export default function EditorDom(props: Props) {
     if (initialized) requestAnimationFrame(() => void p.current.onReady());
   }, [initialized]);
 
+  const childPages = useMemo<ChildPageHost>(
+    () => ({
+      resolve: (ids) => p.current.resolvePages(ids),
+      create: async (input) => {
+        await pendingLocalUpdates.current;
+        return p.current.createSubpage(input);
+      },
+      open: (id) => void p.current.openPage(id),
+      archive: (id) => p.current.archivePage(id),
+      move: (id) => void p.current.movePage(id),
+      subscribe: (listener) => {
+        metadataListeners.current.add(listener);
+        return () => void metadataListeners.current.delete(listener);
+      },
+    }),
+    [],
+  );
   if (!initialized) return null;
   return (
     <main className="mobile-editor">
       <WorkspaceEditor
+        childPages={childPages}
         doc={doc}
         awareness={awareness}
         user={props.user}

@@ -2,7 +2,7 @@ import { type DehydratedState, dehydrate, hydrate, type QueryClient } from "@tan
 import { deleteDb, done, openDb, req } from "./idb";
 
 /** Metadata persisted per account so a visited workspace stays navigable offline. Never page bodies (those live in the doc cache). */
-const PERSISTED = new Set(["workspaces", "pages", "favorites", "recents", "page", "database"]);
+const PERSISTED = new Set(["workspaces", "pages", "favorites", "recents", "page", "database", "hierarchy"]);
 const MAX_PAGE_ENTRIES = 150;
 const LAST_USER = "ws-last-user";
 
