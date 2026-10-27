@@ -27,7 +27,7 @@ Resume here. Plan: [plans/workspace-blueprint.md](../plans/workspace-blueprint.m
 | S1 core + Worker + DOs | done | `apps/server` sync tests 7/7, core 13/13, editor encoding 2/2 |
 | S2 auth, invitations, roles | done | server suite 221/221 (authz matrix, isolation, invitations, members, pages, attachments, databases incl. 10k rows, search, MCP/OAuth, backup, compaction, archive) |
 | S3 web app | done | typecheck/build/lint clean; Playwright 14/14 (auth, collab+carets, offline reload, database, editor, ack-before-synced, search, tree keyboard, viewer, revoked draft, settings, trash, axe); initial shell 105.8 KiB gzip |
-| S4 MCP + OAuth | done; Codex deployed tool calls pending | `test/mcp.test.ts` 8/8; local Codex + Claude Code verified 2026-10-26; production 2026-10-27: Claude Code login + create/read, Codex login only (usage limit) (docs/MCP.md). CIMD opt-in; pre-dispatch per-tool scope step-up |
+| S4 MCP + OAuth | done | `test/mcp.test.ts` 8/8; local Codex + Claude Code verified 2026-10-26; production 2026-10-27: Claude Code login + create/read, Codex login + search/read/edit, checked in D1 (docs/MCP.md). CIMD opt-in; pre-dispatch per-tool scope step-up |
 | S5 databases/search/portability | done | server tests + web database spec; CSV/Markdown import/export |
 | S6 native app | done on iOS simulator | tsc clean, 12 node tests; Debug + Release on iPhone 17 Pro sim: sign-in, invites, editing, offline force-quit/relaunch, resync. Not verified: Android, devices, Maestro, uploads, non-ASCII paste |
 | S7 hardening/deploy | deployed | staging `https://workspace-staging.paragonxplays.workers.dev` (version eed9c3cb), production `https://workspace.paragonxplays.workers.dev` (version aee8224a, consent CSP fix); smoke checks pass; restore drill ok; owner signed in with Google on production |
@@ -61,8 +61,8 @@ Resume here. Plan: [plans/workspace-blueprint.md](../plans/workspace-blueprint.m
 - Smoke-checked on both: SPA + security headers, `testLogin:false` (email sign-up 400), OAuth discovery on the
   deployed origin, signed-out `/mcp` 401 with resource metadata, signed-out sockets close 4401, admin 404.
 - 2026-10-27: production owner workspace `ws_Fdod8OKrPR96JwevHSI6NQ` bootstrapped; paragonxplays@gmail.com
-  accepted the owner invite via Google sign-in. Claude Code verified against production `/mcp`; Codex logged in
-  but its tool run is blocked by the ChatGPT usage limit — rerun `codex exec` against `notion-workspace`.
+  accepted the owner invite via Google sign-in. Claude Code and Codex both verified against production `/mcp`
+  (login, reads and an edit each; see docs/MCP.md).
 - Mobile store builds: `eas build` not run; App Store Connect / Play Console ids are placeholders in `apps/mobile/eas.json`.
 - An `apps/desktop` Tauri app and matching root script/README/.gitignore edits appeared on 2026-10-26 08:04 from
   outside this session; left uncommitted for their owner (its dependency is in the committed lockfile).

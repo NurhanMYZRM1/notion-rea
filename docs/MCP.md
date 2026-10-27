@@ -33,6 +33,9 @@ codex mcp add notion-workspace --url https://HOST/mcp
 codex mcp login notion-workspace
 ```
 
+`codex exec` runs with approval policy `never`, which refuses tools that change data; use interactive `codex`,
+or `codex exec --approve-for-me`, for edits.
+
 ## Tools
 
 `workspace_info`, `search`, `list_pages`, `read_page`, `create_page`, `update_page`, `edit_blocks`,
@@ -72,7 +75,10 @@ Production (2026-10-27, `https://workspace.paragonxplays.workers.dev`, owner sig
 | Client | Login | Tools exercised | Result |
 |--------|-------|-----------------|--------|
 | Claude Code 2.1.306 (`claude mcp add --scope local notion-workspace` + `claude mcp login --no-browser`; ✔ Connected) | OAuth, consent approved for read/write | `workspace_info`, `create_page` (idempotencyKey), `read_page` | page "MCP check (Claude Code)" created, revision 1 |
-| Codex 0.157.1 (`codex mcp add notion-workspace` + `codex mcp login --no-browser`) | OAuth, consent approved for read/write; "Authentication complete" | not run: the ChatGPT account hit its Codex usage limit | login only |
+| Codex 0.157.1 (`codex mcp add notion-workspace` + `codex mcp login --no-browser`; `codex exec --approve-for-me`) | OAuth, consent approved for read/write; "Authentication complete" | `workspace_info`, `search`, `read_page`, `edit_blocks` | found the Claude Code page, appended a paragraph, revision 2 |
+
+Server check afterwards (2026-10-27): `search_docs` for that page holds both paragraphs at revision 2, and the
+Codex grant shows a last-use time.
 
 Finding: the first deployed attempt failed in Chrome. The consent page sent `form-action 'self'`, and Chrome
 applies `form-action` to the redirect after the POST, so the 302 to `http://localhost:<port>/callback` was
