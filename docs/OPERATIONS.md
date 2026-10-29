@@ -97,3 +97,22 @@ bodies, cookies, tokens or authorization codes.
 
 `API_LIMIT` (Workers Rate Limiting) caps 600 API requests per user per minute; Better Auth limits
 sign-in attempts in production.
+
+## Dependency audit exception
+
+CI runs `pnpm audit --prod --audit-level high`. The workspace temporarily excludes
+[GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5): Expo CLI
+58.1.x requires Zod `^3.25.76`, while the advisory's patched range starts at 4.6.6.
+The affected dependency paths end in `@expo/cli>zod`, used by the local development
+server's DevTools schemas. The application's Zod dependency remains pinned to
+4.6.7. Avoid exposing the Expo development server to untrusted clients.
+
+Remove this exception when Expo CLI supports a patched Zod version. When updating
+Expo or Zod, temporarily remove `auditConfig.ignoreGhsas` from
+`pnpm-workspace.yaml` and run `pnpm audit --prod --audit-level high --json`.
+Verify that any remaining Zod findings are still confined to Expo CLI.
+The exception applies to the advisory across the workspace, so a new runtime
+dependency on vulnerable Zod must not be covered by it.
+
+`node-forge` is upgraded to 1.4.2 using an override for versions below 1.4.1;
+its signature-verification advisory is not excluded from the audit.
