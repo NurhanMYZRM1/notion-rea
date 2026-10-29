@@ -20,3 +20,11 @@ allowBuilds:
 overrides:
   react: 19.3.0
   react-dom: 19.3.0
+  # GHSA-86w9-cpqp-85rv: upgrade Expo CLI's signature-verification dependency.
+  'node-forge@<1.4.1': 1.4.2
+auditConfig:
+  ignoreGhsas:
+    # Expo CLI 58.1.x requires Zod 3; the fix requires Zod >=4.6.6.
+    # All affected paths end in @expo/cli>zod. Application Zod is pinned to 4.6.7.
+    # Remove when Expo CLI supports patched Zod. See docs/OPERATIONS.md.
+    - GHSA-mrhx-c7xc-m3w5
